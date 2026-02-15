@@ -26,8 +26,6 @@ lab-remote-bootstrap/
 ├── local/
 │   ├── dashboard.env.example
 │   └── open_clash_dashboard.sh
-├── tools/
-│   └── open_clash_dashboard.sh
 └── docs/
     ├── Docker容器内连vpn.md
     └── Docker 远程开发环境搭建与维护手册.md
@@ -181,7 +179,6 @@ bash local/open_clash_dashboard.sh local/dashboard.env
 
 默认会建立本地 `9090 -> 远端 Clash API` 的 SSH 隧道，并打开 Dashboard 页面。
 如需停止隧道，脚本会输出对应 `ssh -O exit` 命令。
-`tools/open_clash_dashboard.sh` 仍可用，但仅作为兼容入口（会转发到 `local/`）。
 
 ---
 
