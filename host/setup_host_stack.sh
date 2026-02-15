@@ -235,7 +235,7 @@ write_managed_zsh_block() {
   local zshrc="$TARGET_HOME/.zshrc"
   local start_marker="# >>> lab-remote-bootstrap >>>"
   local end_marker="# <<< lab-remote-bootstrap <<<"
-  local block
+  local block tmp_block tmp_py
   block=$(cat <<BLOCK
 ${start_marker}
 export CLASH_HTTP_PORT=${CLASH_HTTP_PORT}
@@ -290,24 +290,32 @@ fi
 ${end_marker}
 BLOCK
 )
+  tmp_block="$(mktemp "${TMPDIR:-/tmp}/lab-zsh-block.XXXXXX")"
+  tmp_py="$(mktemp "${TMPDIR:-/tmp}/lab-zsh-merge.XXXXXX.py")"
+  TMP_FILES+=("$tmp_block" "$tmp_py")
+  printf '%s\n' "$block" > "$tmp_block"
+  cat > "$tmp_py" <<'PY'
+from pathlib import Path
+import sys
+
+zshrc = Path(sys.argv[1])
+start = sys.argv[2]
+end = sys.argv[3]
+block = Path(sys.argv[4]).read_text()
+text = zshrc.read_text() if zshrc.exists() else ""
+
+if start in text and end in text:
+    before = text.split(start, 1)[0].rstrip() + "\n\n"
+    after = text.split(end, 1)[1].lstrip("\n")
+    text = before + block + "\n\n" + after
+else:
+    text = text.rstrip() + ("\n\n" if text.strip() else "") + block + "\n"
+
+zshrc.write_text(text)
+PY
 
   run_as_target "mkdir -p '$TARGET_HOME/.zsh/plugins' '$TARGET_HOME/.zsh/themes'"
-
-  run_as_target "python3 - <<'PY'
-from pathlib import Path
-zshrc = Path(${zshrc@Q})
-start = ${start_marker@Q}
-end = ${end_marker@Q}
-block = ${block@Q}
-text = zshrc.read_text() if zshrc.exists() else ''
-if start in text and end in text:
-    before = text.split(start, 1)[0].rstrip() + '\n\n'
-    after = text.split(end, 1)[1].lstrip('\n')
-    text = before + block + '\n\n' + after
-else:
-    text = text.rstrip() + ('\n\n' if text.strip() else '') + block + '\n'
-zshrc.write_text(text)
-PY"
+  run_as_target "$(printf 'python3 %q %q %q %q %q' "$tmp_py" "$zshrc" "$start_marker" "$end_marker" "$tmp_block")"
 }
 
 CLASH_CORE_SOURCE="$(resolve_clash_core "$CLASH_SOURCE_DIR" || true)"
