@@ -1,6 +1,7 @@
 # Local secrets/config
 docker/docker-stack.env
 host/host-stack.env
+local/dashboard.env
 
 # Clash assets are usually private or large
 assets/clash/config.yaml

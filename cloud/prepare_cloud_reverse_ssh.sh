@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "[ERROR] cloud/prepare_cloud_reverse_ssh.sh must run on the Linux cloud server."
+  exit 1
+fi
+
 REVERSE_PORT="${1:-2223}"
 
 if [[ $EUID -eq 0 ]]; then
