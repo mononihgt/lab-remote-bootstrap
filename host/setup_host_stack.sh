@@ -13,6 +13,8 @@ fi
 TARGET_USER="${TARGET_USER:-${SUDO_USER:-$USER}}"
 INSTALL_ROOT="${INSTALL_ROOT:-/opt/lab-remote-stack}"
 CLASH_SOURCE_DIR="${CLASH_SOURCE_DIR:-}"
+CLASH_CORE_FILE="${CLASH_CORE_FILE:-}"
+CLASH_CONFIG_FILE="${CLASH_CONFIG_FILE:-config.yaml}"
 SSH_KEY_SOURCE="${SSH_KEY_SOURCE:-}"
 
 CLOUD_USER="${CLOUD_USER:-}"
@@ -79,6 +81,32 @@ need_file() {
     echo "[ERROR] Missing required file: $file_path"
     exit 1
   fi
+}
+
+resolve_clash_core() {
+  local dir="$1"
+  local core_path="${CLASH_CORE_FILE:-}"
+  if [[ -n "$core_path" ]]; then
+    [[ "$core_path" = /* ]] || core_path="$dir/$core_path"
+    printf '%s\n' "$core_path"
+    return 0
+  fi
+  local picked
+  picked="$(find "$dir" -maxdepth 1 -type f \
+    \( -name 'CrashCore' -o -name 'mihomo*' -o -name 'clash*' \) \
+    ! -name '*.gz' | sort | head -n 1)"
+  if [[ -n "$picked" ]]; then
+    printf '%s\n' "$picked"
+    return 0
+  fi
+  return 1
+}
+
+resolve_clash_config() {
+  local dir="$1"
+  local config_path="${CLASH_CONFIG_FILE:-config.yaml}"
+  [[ "$config_path" = /* ]] || config_path="$dir/$config_path"
+  printf '%s\n' "$config_path"
 }
 
 run_as_target() {
@@ -248,10 +276,18 @@ zshrc.write_text(text)
 PY"
 }
 
+CLASH_CORE_SOURCE="$(resolve_clash_core "$CLASH_SOURCE_DIR" || true)"
+CLASH_CONFIG_SOURCE="$(resolve_clash_config "$CLASH_SOURCE_DIR")"
+if [[ -z "$CLASH_CORE_SOURCE" ]]; then
+  echo "[ERROR] No clash core binary found in $CLASH_SOURCE_DIR"
+  echo "        Provide CrashCore/mihomo*/clash* (non-.gz), or set CLASH_CORE_FILE in env."
+  exit 1
+fi
+
 log "Checking required local files"
 need_file "$SSH_KEY_SOURCE"
-need_file "$CLASH_SOURCE_DIR/CrashCore"
-need_file "$CLASH_SOURCE_DIR/config.yaml"
+need_file "$CLASH_CORE_SOURCE"
+need_file "$CLASH_CONFIG_SOURCE"
 need_file "$CLASH_SOURCE_DIR/geoip.dat"
 need_file "$CLASH_SOURCE_DIR/geosite.dat"
 
@@ -282,8 +318,8 @@ SSH_SERVICE="$(ssh_service_name)"
 log "Preparing install directories"
 "${SUDO[@]}" mkdir -p "$INSTALL_ROOT"/{bin,clash,ssh,logs}
 "${SUDO[@]}" install -m 600 "$SSH_KEY_SOURCE" "$INSTALL_ROOT/ssh/cloud_key"
-"${SUDO[@]}" install -m 755 "$CLASH_SOURCE_DIR/CrashCore" "$INSTALL_ROOT/clash/CrashCore"
-"${SUDO[@]}" install -m 644 "$CLASH_SOURCE_DIR/config.yaml" "$INSTALL_ROOT/clash/config.yaml"
+"${SUDO[@]}" install -m 755 "$CLASH_CORE_SOURCE" "$INSTALL_ROOT/clash/CrashCore"
+"${SUDO[@]}" install -m 644 "$CLASH_CONFIG_SOURCE" "$INSTALL_ROOT/clash/config.yaml"
 "${SUDO[@]}" install -m 644 "$CLASH_SOURCE_DIR/geoip.dat" "$INSTALL_ROOT/clash/geoip.dat"
 "${SUDO[@]}" install -m 644 "$CLASH_SOURCE_DIR/geosite.dat" "$INSTALL_ROOT/clash/geosite.dat"
 "${SUDO[@]}" chown -R "$TARGET_USER:$TARGET_GROUP" "$INSTALL_ROOT"

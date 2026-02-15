@@ -3,7 +3,8 @@ docker/docker-stack.env
 host/host-stack.env
 
 # Clash assets are usually private or large
-assets/clash/*
+assets/clash/config.yaml
+assets/clash/conf*
 !assets/clash/README.md
 
 # macOS

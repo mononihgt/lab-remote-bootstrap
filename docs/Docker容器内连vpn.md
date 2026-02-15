@@ -9,7 +9,7 @@
 1. **Clash 核心 (Mihomo)**: [下载地址 (GitHub)](https://github.com/MetaCubeX/mihomo/releases)
     - 下载 `mihomo-linux-amd64-vX.X.X.gz`。
     - 解压后，**重命名为 **`CrashCore` (注意大小写)。
-2. **配置文件**: [在线转换工具](https://acl4ssr-sub.github.io/)
+2. **配置文件**: [在线转换工具](https://ovpnspider.com/subconvert)
     - 将你的订阅链接转换并下载，**重命名为 **`config.yaml`。
 3. **GeoIP 数据库**: [下载地址](https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat)
     - 下载 `geoip.dat`。

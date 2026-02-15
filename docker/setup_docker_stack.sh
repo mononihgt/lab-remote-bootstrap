@@ -13,6 +13,8 @@ fi
 PROJECT_ROOT="${PROJECT_ROOT:-$HOME/my-docker-lab}"
 DOCKER_CONTEXT_DIR="${DOCKER_CONTEXT_DIR:-$PROJECT_ROOT/docker_context}"
 CLASH_SOURCE_DIR="${CLASH_SOURCE_DIR:-}"
+CLASH_CORE_FILE="${CLASH_CORE_FILE:-}"
+CLASH_CONFIG_FILE="${CLASH_CONFIG_FILE:-config.yaml}"
 WORKSPACE_HOST_DIR="${WORKSPACE_HOST_DIR:-$HOME/my_project}"
 SSH_KEY_SOURCE="${SSH_KEY_SOURCE:-$HOME/.ssh/id_ed25519_autossh}"
 CLOUD_USER="${CLOUD_USER:-}"
@@ -62,6 +64,40 @@ need_file() {
   fi
 }
 
+resolve_clash_core() {
+  local dir="$1"
+  local core_path="${CLASH_CORE_FILE:-}"
+  if [[ -n "$core_path" ]]; then
+    [[ "$core_path" = /* ]] || core_path="$dir/$core_path"
+    printf '%s\n' "$core_path"
+    return 0
+  fi
+  local picked
+  picked="$(find "$dir" -maxdepth 1 -type f \
+    \( -name 'CrashCore' -o -name 'mihomo*' -o -name 'clash*' \) \
+    ! -name '*.gz' | sort | head -n 1)"
+  if [[ -n "$picked" ]]; then
+    printf '%s\n' "$picked"
+    return 0
+  fi
+  return 1
+}
+
+resolve_clash_config() {
+  local dir="$1"
+  local config_path="${CLASH_CONFIG_FILE:-config.yaml}"
+  [[ "$config_path" = /* ]] || config_path="$dir/$config_path"
+  printf '%s\n' "$config_path"
+}
+
+CLASH_CORE_SOURCE="$(resolve_clash_core "$CLASH_SOURCE_DIR" || true)"
+CLASH_CONFIG_SOURCE="$(resolve_clash_config "$CLASH_SOURCE_DIR")"
+if [[ -z "$CLASH_CORE_SOURCE" ]]; then
+  echo "[ERROR] No clash core binary found in $CLASH_SOURCE_DIR"
+  echo "        Provide CrashCore/mihomo*/clash* (non-.gz), or set CLASH_CORE_FILE in env."
+  exit 1
+fi
+
 run_cloud_cmd() {
   ssh -i "$SSH_KEY_SOURCE" \
     -p "$CLOUD_SSH_PORT" \
@@ -73,8 +109,8 @@ run_cloud_cmd() {
 
 log "Checking required local files"
 need_file "$SSH_KEY_SOURCE"
-need_file "$CLASH_SOURCE_DIR/CrashCore"
-need_file "$CLASH_SOURCE_DIR/config.yaml"
+need_file "$CLASH_CORE_SOURCE"
+need_file "$CLASH_CONFIG_SOURCE"
 need_file "$CLASH_SOURCE_DIR/geoip.dat"
 need_file "$CLASH_SOURCE_DIR/geosite.dat"
 
@@ -101,9 +137,10 @@ mkdir -p "$PROJECT_ROOT/ssh_keys" "$PROJECT_ROOT/clash" "$DOCKER_CONTEXT_DIR" "$
 cp "$SSH_KEY_SOURCE" "$PROJECT_ROOT/ssh_keys/cloud_key"
 chmod 600 "$PROJECT_ROOT/ssh_keys/cloud_key"
 
-for f in CrashCore config.yaml geoip.dat geosite.dat; do
-  cp "$CLASH_SOURCE_DIR/$f" "$PROJECT_ROOT/clash/$f"
-done
+cp "$CLASH_CORE_SOURCE" "$PROJECT_ROOT/clash/CrashCore"
+cp "$CLASH_CONFIG_SOURCE" "$PROJECT_ROOT/clash/config.yaml"
+cp "$CLASH_SOURCE_DIR/geoip.dat" "$PROJECT_ROOT/clash/geoip.dat"
+cp "$CLASH_SOURCE_DIR/geosite.dat" "$PROJECT_ROOT/clash/geosite.dat"
 chmod +x "$PROJECT_ROOT/clash/CrashCore"
 
 log "Writing Dockerfile"

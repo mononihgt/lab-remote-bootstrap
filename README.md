@@ -42,8 +42,8 @@ ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 
 ### 2) Clash 文件（放到 `assets/clash/`）
 
-- `CrashCore`
-- `config.yaml`
+- 内核二进制（文件名不限，脚本会自动识别 `CrashCore` / `mihomo*` / `clash*`）
+- `config.yaml`（隐私配置，建议每个用户自行准备，不放仓库）
 - `geoip.dat`
 - `geosite.dat`
 
