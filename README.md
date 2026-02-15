@@ -23,6 +23,8 @@ lab-remote-bootstrap/
 ├── host/
 │   ├── host-stack.env.example
 │   └── setup_host_stack.sh
+├── tools/
+│   └── open_clash_dashboard.sh
 └── docs/
     ├── Docker容器内连vpn.md
     └── Docker 远程开发环境搭建与维护手册.md
@@ -148,6 +150,26 @@ sudo journalctl -u lab-clash.service -f
 sudo journalctl -u lab-autossh.service -f
 ```
 
+### SSH 输入乱码/重复字符
+
+若 SSH 登录后输入出现乱码或重复字符，先执行：
+
+```bash
+stty sane
+reset
+```
+
+若仍有问题，临时禁用 `~/.zshrc` 中自动补全/高亮插件后重登（`zsh-autosuggestions` / `zsh-syntax-highlighting`）。
+
+### 图形化选节点（一键）
+
+```bash
+bash tools/open_clash_dashboard.sh host/host-stack.env
+```
+
+默认会建立本地 `9090 -> 远端 Clash API` 的 SSH 隧道，并打开 Dashboard 页面。
+如需停止隧道，脚本会输出对应 `ssh -O exit` 命令。
+
 ---
 
 ## 连接方式
@@ -160,5 +182,5 @@ sudo journalctl -u lab-autossh.service -f
 ## 备注
 
 - 本目录只是脚本仓库骨架，**没有做 git init**，你可以自行初始化和推送。
-- 已包含 `.gitignore`，默认忽略 `docker/docker-stack.env`、`host/host-stack.env` 和 `assets/clash/*`。
+- 已包含 `.gitignore`，默认忽略 `docker/docker-stack.env`、`host/host-stack.env`、`assets/clash/config.yaml` 等私有配置。
 - 后续更新脚本时，建议保留 `*.env` 的本地私有配置，不要提交明文密码/密钥路径。
