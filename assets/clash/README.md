@@ -8,3 +8,4 @@
 如果自动识别失败，可在 `*.env` 中设置：
 
 - `CLASH_CORE_FILE=你的内核文件名`
+- `CLASH_CONFIG_URL=你的配置URL`（设置后可不在本目录放 `config.yaml`）

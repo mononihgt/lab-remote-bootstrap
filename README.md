@@ -47,6 +47,10 @@ ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 - `geoip.dat`
 - `geosite.dat`
 
+如果不想把 `config.yaml` 放本地文件，也可以在 `*.env` 里设置：
+
+- `CLASH_CONFIG_URL=...`（脚本会临时下载，优先级高于 `CLASH_CONFIG_FILE`）
+
 ---
 
 ## 第一步（云服务器）

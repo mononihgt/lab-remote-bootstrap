@@ -15,6 +15,7 @@ DOCKER_CONTEXT_DIR="${DOCKER_CONTEXT_DIR:-$PROJECT_ROOT/docker_context}"
 CLASH_SOURCE_DIR="${CLASH_SOURCE_DIR:-}"
 CLASH_CORE_FILE="${CLASH_CORE_FILE:-}"
 CLASH_CONFIG_FILE="${CLASH_CONFIG_FILE:-config.yaml}"
+CLASH_CONFIG_URL="${CLASH_CONFIG_URL:-}"
 WORKSPACE_HOST_DIR="${WORKSPACE_HOST_DIR:-$HOME/my_project}"
 SSH_KEY_SOURCE="${SSH_KEY_SOURCE:-$HOME/.ssh/id_ed25519_autossh}"
 CLOUD_USER="${CLOUD_USER:-}"
@@ -28,6 +29,7 @@ CONTAINER_TIMEZONE="${CONTAINER_TIMEZONE:-Asia/Shanghai}"
 CLASH_HTTP_PORT="${CLASH_HTTP_PORT:-7890}"
 CLASH_SOCKS_PORT="${CLASH_SOCKS_PORT:-7891}"
 CLASH_API_PORT="${CLASH_API_PORT:-9090}"
+TMP_FILES=()
 
 normalize_clash_source_dir() {
   local path="${1:-}"
@@ -64,6 +66,28 @@ need_file() {
   fi
 }
 
+cleanup_tmp_files() {
+  local file_path
+  for file_path in "${TMP_FILES[@]:-}"; do
+    [[ -n "$file_path" ]] && rm -f "$file_path" >/dev/null 2>&1 || true
+  done
+}
+
+download_to_file() {
+  local url="$1"
+  local output="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$output"
+    return 0
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO "$output" "$url"
+    return 0
+  fi
+  echo "[ERROR] Neither curl nor wget is available to download clash config URL."
+  exit 1
+}
+
 resolve_clash_core() {
   local dir="$1"
   local core_path="${CLASH_CORE_FILE:-}"
@@ -85,10 +109,20 @@ resolve_clash_core() {
 
 resolve_clash_config() {
   local dir="$1"
+  if [[ -n "$CLASH_CONFIG_URL" ]]; then
+    local tmp_cfg
+    tmp_cfg="$(mktemp "${TMPDIR:-/tmp}/clash-config.XXXXXX.yaml")"
+    download_to_file "$CLASH_CONFIG_URL" "$tmp_cfg"
+    TMP_FILES+=("$tmp_cfg")
+    printf '%s\n' "$tmp_cfg"
+    return 0
+  fi
   local config_path="${CLASH_CONFIG_FILE:-config.yaml}"
   [[ "$config_path" = /* ]] || config_path="$dir/$config_path"
   printf '%s\n' "$config_path"
 }
+
+trap cleanup_tmp_files EXIT
 
 CLASH_CORE_SOURCE="$(resolve_clash_core "$CLASH_SOURCE_DIR" || true)"
 CLASH_CONFIG_SOURCE="$(resolve_clash_config "$CLASH_SOURCE_DIR")"
