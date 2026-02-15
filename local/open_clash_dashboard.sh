@@ -44,7 +44,8 @@ if [[ -z "$CLOUD_HOST" ]]; then
 fi
 
 safe_host="${CLOUD_HOST//[^[:alnum:]._-]/_}"
-CTRL_SOCKET="${TMPDIR:-/tmp}/lab-clash-dashboard-${safe_host}-${REVERSE_PORT}-${LOCAL_DASHBOARD_PORT}.sock"
+socket_id="$(printf '%s' "${safe_host}-${REVERSE_PORT}-${LOCAL_DASHBOARD_PORT}" | cksum | awk '{print $1}')"
+CTRL_SOCKET="/tmp/lcd-${socket_id}.sock"
 
 ssh_base=(
   -S "$CTRL_SOCKET"
