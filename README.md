@@ -177,10 +177,3 @@ bash tools/open_clash_dashboard.sh host/host-stack.env
 - Docker 模式（默认）：`ssh -p 2223 root@<云服务器IP>`
 - Host 模式（默认）：`ssh -p 2223 <TARGET_USER>@<云服务器IP>`
 
----
-
-## 备注
-
-- 本目录只是脚本仓库骨架，**没有做 git init**，你可以自行初始化和推送。
-- 已包含 `.gitignore`，默认忽略 `docker/docker-stack.env`、`host/host-stack.env`、`assets/clash/config.yaml` 等私有配置。
-- 后续更新脚本时，建议保留 `*.env` 的本地私有配置，不要提交明文密码/密钥路径。
