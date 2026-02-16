@@ -2,15 +2,15 @@
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Linux" ]]; then
-  echo "[ERROR] host/setup_docker_mirror_cn.sh must run on a Linux host."
+  echo "[ERROR] docker/setup_docker_mirror_cn.sh must run on a Linux host."
   exit 1
 fi
 
 usage() {
   cat <<USAGE
 Usage:
-  bash host/setup_docker_mirror_cn.sh [--enable-proxy] [--proxy-url URL] [--mirrors CSV]
-  bash host/setup_docker_mirror_cn.sh --disable-proxy
+  bash docker/setup_docker_mirror_cn.sh [--enable-proxy] [--proxy-url URL] [--mirrors CSV]
+  bash docker/setup_docker_mirror_cn.sh --disable-proxy
 
 Options:
   --enable-proxy       Configure Docker daemon HTTP/HTTPS proxy (default: disabled)

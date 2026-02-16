@@ -19,10 +19,10 @@ lab-remote-bootstrap/
 │   └── prepare_cloud_reverse_ssh.sh
 ├── docker/
 │   ├── docker-stack.env.example
+│   ├── setup_docker_mirror_cn.sh
 │   └── setup_docker_stack.sh
 ├── host/
 │   ├── host-stack.env.example
-│   ├── setup_docker_mirror_cn.sh
 │   └── setup_host_stack.sh
 ├── local/
 │   ├── dashboard.env.example
@@ -37,7 +37,7 @@ lab-remote-bootstrap/
 ## 运行位置速查
 
 - **本地电脑运行（客户端）**：`local/open_clash_dashboard.sh`
-- **实验室宿主机运行（Linux 服务器）**：`host/setup_host_stack.sh`、`docker/setup_docker_stack.sh`
+- **实验室宿主机运行（Linux 服务器）**：`host/setup_host_stack.sh`、`docker/setup_docker_stack.sh`、`docker/setup_docker_mirror_cn.sh`
 - **云服务器运行（跳板机）**：`cloud/prepare_cloud_reverse_ssh.sh`
 
 ---
@@ -140,10 +140,10 @@ bash host/setup_host_stack.sh host/host-stack.env
 
 ```bash
 # 仅配置国内 Docker registry mirror
-bash host/setup_docker_mirror_cn.sh
+bash docker/setup_docker_mirror_cn.sh
 
 # 同时给 Docker daemon 配 Clash 代理
-bash host/setup_docker_mirror_cn.sh --enable-proxy
+bash docker/setup_docker_mirror_cn.sh --enable-proxy
 ```
 
 ---
