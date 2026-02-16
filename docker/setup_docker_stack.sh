@@ -210,13 +210,13 @@ RUN apt-get update && apt-get install -y \
     vim \
     wget \
     zsh \
+    zsh-autosuggestions \
+    zsh-syntax-highlighting \
     && if apt-cache show fastfetch >/dev/null 2>&1; then apt-get install -y fastfetch; fi \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /var/run/sshd /root/.ssh /opt/clash /workspace
 RUN mkdir -p /root/.zsh/plugins /root/.zsh/themes \
-    && git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions /root/.zsh/plugins/zsh-autosuggestions || true \
-    && git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting /root/.zsh/plugins/zsh-syntax-highlighting || true \
     && git clone --depth=1 https://github.com/zsh-users/zsh-completions /root/.zsh/plugins/zsh-completions || true \
     && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /root/.zsh/themes/powerlevel10k || true
 RUN chsh -s /usr/bin/zsh root || true
@@ -298,10 +298,14 @@ setopt hist_verify
 bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
 
-if [[ -r /root/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
+if [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
+  source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+elif [[ -r /root/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
   source /root/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 fi
-if [[ -r /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
+if [[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
+  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+elif [[ -r /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
   source /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 fi
 
