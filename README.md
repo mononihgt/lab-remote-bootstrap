@@ -22,6 +22,7 @@ lab-remote-bootstrap/
 │   └── setup_docker_stack.sh
 ├── host/
 │   ├── host-stack.env.example
+│   ├── setup_docker_mirror_cn.sh
 │   └── setup_host_stack.sh
 ├── local/
 │   ├── dashboard.env.example
@@ -134,6 +135,16 @@ bash host/setup_host_stack.sh host/host-stack.env
   - `lab-autossh.service`
 - zsh 增强（completion/history/autosuggestions/syntax-highlighting/powerlevel10k/fastfetch）
 - 在 `.zshrc` 注入 Clash 代理变量（带端口可配置）
+
+### 3. 国内网络可选优化（Docker 镜像源）
+
+```bash
+# 仅配置国内 Docker registry mirror
+bash host/setup_docker_mirror_cn.sh
+
+# 同时给 Docker daemon 配 Clash 代理
+bash host/setup_docker_mirror_cn.sh --enable-proxy
+```
 
 ---
 

@@ -210,14 +210,15 @@ RUN apt-get update && apt-get install -y \
     vim \
     wget \
     zsh \
-    zsh-autosuggestions \
-    zsh-syntax-highlighting \
-    zsh-completions \
     && if apt-cache show fastfetch >/dev/null 2>&1; then apt-get install -y fastfetch; fi \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /var/run/sshd /root/.ssh /opt/clash /workspace
-RUN git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /root/.powerlevel10k || true
+RUN mkdir -p /root/.zsh/plugins /root/.zsh/themes \
+    && git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions /root/.zsh/plugins/zsh-autosuggestions || true \
+    && git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting /root/.zsh/plugins/zsh-syntax-highlighting || true \
+    && git clone --depth=1 https://github.com/zsh-users/zsh-completions /root/.zsh/plugins/zsh-completions || true \
+    && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /root/.zsh/themes/powerlevel10k || true
 RUN chsh -s /usr/bin/zsh root || true
 
 COPY entrypoint.sh /entrypoint.sh
@@ -277,6 +278,9 @@ export FTP_PROXY="http://127.0.0.1:${CLASH_HTTP_PORT}"
 export all_proxy="socks5://127.0.0.1:${CLASH_SOCKS_PORT}"
 export ALL_PROXY="socks5://127.0.0.1:${CLASH_SOCKS_PORT}"
 
+if [[ -d /root/.zsh/plugins/zsh-completions/src ]]; then
+  fpath=(/root/.zsh/plugins/zsh-completions/src \$fpath)
+fi
 autoload -Uz compinit
 compinit
 zstyle ':completion:*' menu select
@@ -294,20 +298,20 @@ setopt hist_verify
 bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
 
-if [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
-  source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+if [[ -r /root/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
+  source /root/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 fi
-if [[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
-  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+if [[ -r /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
+  source /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 fi
 
 alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
 
-if [[ -r /root/.powerlevel10k/powerlevel10k.zsh-theme ]]; then
+if [[ -r /root/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
   export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
-  source /root/.powerlevel10k/powerlevel10k.zsh-theme
+  source /root/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme
   [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 else
   PROMPT='%F{cyan}%n@%m%f:%F{yellow}%~%f %# '
