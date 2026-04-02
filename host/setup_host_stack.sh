@@ -15,7 +15,6 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-TARGET_USER="${TARGET_USER:-${SUDO_USER:-$USER}}"
 INSTALL_ROOT="${INSTALL_ROOT:-/opt/lab-remote-stack}"
 CLASH_SOURCE_DIR="${CLASH_SOURCE_DIR:-}"
 CLASH_CORE_FILE="${CLASH_CORE_FILE:-}"
@@ -34,6 +33,34 @@ CLASH_HTTP_PORT="${CLASH_HTTP_PORT:-7890}"
 CLASH_SOCKS_PORT="${CLASH_SOCKS_PORT:-7891}"
 CLASH_API_PORT="${CLASH_API_PORT:-9090}"
 TMP_FILES=()
+
+resolve_local_user() {
+  local candidate
+  for candidate in "${TARGET_USER:-}" "${HOST_LOGIN_USER:-}" "${SUDO_USER:-}"; do
+    if [[ -n "$candidate" ]] && id "$candidate" >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  if command -v logname >/dev/null 2>&1; then
+    candidate="$(logname 2>/dev/null || true)"
+    if [[ -n "$candidate" ]] && id "$candidate" >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  fi
+
+  candidate="${USER:-}"
+  if [[ -n "$candidate" ]] && id "$candidate" >/dev/null 2>&1; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  id -un
+}
+
+TARGET_USER="${TARGET_USER:-$(resolve_local_user)}"
 
 detect_target_home() {
   local user_name="$1"

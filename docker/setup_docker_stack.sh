@@ -215,7 +215,6 @@ RUN apt-get update && apt-get install -y \
     autossh \
     ca-certificates \
     curl \
-    eza \
     fd-find \
     fzf \
     git \
@@ -235,6 +234,7 @@ RUN apt-get update && apt-get install -y \
     zsh \
     zsh-autosuggestions \
     zsh-syntax-highlighting \
+    exa \
     && if apt-cache show fastfetch >/dev/null 2>&1; then apt-get install -y fastfetch; fi \
     && rm -rf /var/lib/apt/lists/*
 
