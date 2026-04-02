@@ -182,26 +182,41 @@ install_core_packages() {
     apt-get)
       "${SUDO[@]}" apt-get update
       "${SUDO[@]}" apt-get install -y autossh curl git openssh-client openssh-server python3 tmux zsh
+      "${SUDO[@]}" apt-get install -y fzf fd-find zoxide >/dev/null 2>&1 || true
+      "${SUDO[@]}" apt-get install -y eza >/dev/null 2>&1 || true
+      "${SUDO[@]}" apt-get install -y exa >/dev/null 2>&1 || true
       "${SUDO[@]}" apt-get install -y fastfetch >/dev/null 2>&1 || true
       ;;
     dnf)
       "${SUDO[@]}" dnf install -y autossh curl git openssh-clients openssh-server python3 tmux zsh
+      "${SUDO[@]}" dnf install -y fzf fd-find zoxide >/dev/null 2>&1 || true
+      "${SUDO[@]}" dnf install -y eza >/dev/null 2>&1 || true
+      "${SUDO[@]}" dnf install -y exa >/dev/null 2>&1 || true
       "${SUDO[@]}" dnf install -y fastfetch >/dev/null 2>&1 || true
       ;;
     yum)
       "${SUDO[@]}" yum install -y autossh curl git openssh-clients openssh-server python3 tmux zsh
+      "${SUDO[@]}" yum install -y fzf zoxide >/dev/null 2>&1 || true
+      "${SUDO[@]}" yum install -y fd-find >/dev/null 2>&1 || true
+      "${SUDO[@]}" yum install -y eza >/dev/null 2>&1 || true
+      "${SUDO[@]}" yum install -y exa >/dev/null 2>&1 || true
       "${SUDO[@]}" yum install -y fastfetch >/dev/null 2>&1 || true
       ;;
     pacman)
       "${SUDO[@]}" pacman -Sy --noconfirm autossh curl git openssh python tmux zsh
+      "${SUDO[@]}" pacman -Sy --noconfirm fzf fd zoxide eza >/dev/null 2>&1 || true
       "${SUDO[@]}" pacman -Sy --noconfirm fastfetch >/dev/null 2>&1 || true
       ;;
     zypper)
       "${SUDO[@]}" zypper --non-interactive install autossh curl git openssh python3 tmux zsh
+      "${SUDO[@]}" zypper --non-interactive install fzf fd zoxide eza >/dev/null 2>&1 || true
+      "${SUDO[@]}" zypper --non-interactive install exa >/dev/null 2>&1 || true
       "${SUDO[@]}" zypper --non-interactive install fastfetch >/dev/null 2>&1 || true
       ;;
     apk)
       "${SUDO[@]}" apk add autossh curl git openssh python3 tmux zsh
+      "${SUDO[@]}" apk add fzf fd zoxide eza >/dev/null 2>&1 || true
+      "${SUDO[@]}" apk add exa >/dev/null 2>&1 || true
       "${SUDO[@]}" apk add fastfetch >/dev/null 2>&1 || true
       ;;
     *)
@@ -256,6 +271,9 @@ export FTP_PROXY="http://127.0.0.1:${CLASH_HTTP_PORT}"
 export all_proxy="socks5://127.0.0.1:${CLASH_SOCKS_PORT}"
 export ALL_PROXY="socks5://127.0.0.1:${CLASH_SOCKS_PORT}"
 
+if [[ -d \$HOME/.zsh/plugins/zsh-completions/src ]]; then
+  fpath=(\$HOME/.zsh/plugins/zsh-completions/src \$fpath)
+fi
 autoload -Uz compinit
 compinit
 zstyle ':completion:*' menu select
@@ -279,6 +297,40 @@ if [[ -r \$HOME/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 fi
 if [[ -r \$HOME/.zsh/plugins/zsh-completions/zsh-completions.plugin.zsh ]]; then
   source \$HOME/.zsh/plugins/zsh-completions/zsh-completions.plugin.zsh
+fi
+
+if command -v fzf >/dev/null 2>&1; then
+  eval "\$(fzf --zsh)" 2>/dev/null || true
+  if command -v fd >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND='fd --hidden --strip-cwd-prefix --exclude .git'
+    export FZF_CTRL_T_COMMAND="\$FZF_DEFAULT_COMMAND"
+    export FZF_ALT_C_COMMAND='fd --type=d --hidden --strip-cwd-prefix --exclude .git'
+  elif command -v fdfind >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND='fdfind --hidden --strip-cwd-prefix --exclude .git'
+    export FZF_CTRL_T_COMMAND="\$FZF_DEFAULT_COMMAND"
+    export FZF_ALT_C_COMMAND='fdfind --type=d --hidden --strip-cwd-prefix --exclude .git'
+  fi
+fi
+
+if command -v zoxide >/dev/null 2>&1; then
+  eval "\$(zoxide init zsh)"
+  alias cd='z'
+fi
+
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza --icons=auto'
+  alias ll='eza -alF --icons=auto'
+  alias la='eza -a --icons=auto'
+  alias l='eza -1 --icons=auto'
+elif command -v exa >/dev/null 2>&1; then
+  alias ls='exa --icons=auto'
+  alias ll='exa -alF --icons=auto'
+  alias la='exa -a --icons=auto'
+  alias l='exa -1 --icons=auto'
+else
+  alias ll='ls -alF'
+  alias la='ls -A'
+  alias l='ls -CF'
 fi
 
 if [[ -r \$HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then

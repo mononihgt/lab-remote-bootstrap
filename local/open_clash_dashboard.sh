@@ -36,6 +36,7 @@ REVERSE_PORT="${REVERSE_PORT:-2223}"
 CLASH_API_PORT="${CLASH_API_PORT:-9090}"
 LOCAL_DASHBOARD_PORT="${LOCAL_DASHBOARD_PORT:-9090}"
 DASHBOARD_SSH_USER="${DASHBOARD_SSH_USER:-${TARGET_USER:-root}}"
+DASHBOARD_SSH_IDENTITY_FILE="${DASHBOARD_SSH_IDENTITY_FILE:-}"
 DASHBOARD_URL="${DASHBOARD_URL:-https://metacubex.github.io/metacubexd/}"
 
 if [[ -z "$CLOUD_HOST" ]]; then
@@ -54,6 +55,22 @@ ssh_base=(
   -o ServerAliveInterval=30
   -o ServerAliveCountMax=3
 )
+
+if [[ -n "$DASHBOARD_SSH_IDENTITY_FILE" ]]; then
+  if [[ "$DASHBOARD_SSH_IDENTITY_FILE" == ~/* ]]; then
+    DASHBOARD_SSH_IDENTITY_FILE="${HOME}/${DASHBOARD_SSH_IDENTITY_FILE#~/}"
+  fi
+
+  if [[ ! -f "$DASHBOARD_SSH_IDENTITY_FILE" ]]; then
+    echo "[ERROR] DASHBOARD_SSH_IDENTITY_FILE not found: $DASHBOARD_SSH_IDENTITY_FILE"
+    exit 1
+  fi
+
+  ssh_base+=(
+    -i "$DASHBOARD_SSH_IDENTITY_FILE"
+    -o IdentitiesOnly=yes
+  )
+fi
 
 if ssh "${ssh_base[@]}" "${DASHBOARD_SSH_USER}@${CLOUD_HOST}" -O check >/dev/null 2>&1; then
   echo "[INFO] Tunnel already running."

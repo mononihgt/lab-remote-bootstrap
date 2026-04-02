@@ -194,6 +194,7 @@ RUN apt-get update && apt-get install -y \
     autossh \
     ca-certificates \
     curl \
+    eza \
     fd-find \
     fzf \
     git \
@@ -209,6 +210,7 @@ RUN apt-get update && apt-get install -y \
     tzdata \
     vim \
     wget \
+    zoxide \
     zsh \
     zsh-autosuggestions \
     zsh-syntax-highlighting \
@@ -309,9 +311,39 @@ elif [[ -r /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zs
   source /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 fi
 
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
+if command -v fzf >/dev/null 2>&1; then
+  eval "\$(fzf --zsh)" 2>/dev/null || true
+  if command -v fd >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND='fd --hidden --strip-cwd-prefix --exclude .git'
+    export FZF_CTRL_T_COMMAND="\$FZF_DEFAULT_COMMAND"
+    export FZF_ALT_C_COMMAND='fd --type=d --hidden --strip-cwd-prefix --exclude .git'
+  elif command -v fdfind >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND='fdfind --hidden --strip-cwd-prefix --exclude .git'
+    export FZF_CTRL_T_COMMAND="\$FZF_DEFAULT_COMMAND"
+    export FZF_ALT_C_COMMAND='fdfind --type=d --hidden --strip-cwd-prefix --exclude .git'
+  fi
+fi
+
+if command -v zoxide >/dev/null 2>&1; then
+  eval "\$(zoxide init zsh)"
+  alias cd='z'
+fi
+
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza --icons=auto'
+  alias ll='eza -alF --icons=auto'
+  alias la='eza -a --icons=auto'
+  alias l='eza -1 --icons=auto'
+elif command -v exa >/dev/null 2>&1; then
+  alias ls='exa --icons=auto'
+  alias ll='exa -alF --icons=auto'
+  alias la='exa -a --icons=auto'
+  alias l='exa -1 --icons=auto'
+else
+  alias ll='ls -alF'
+  alias la='ls -A'
+  alias l='ls -CF'
+fi
 
 if [[ -r /root/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
   export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
