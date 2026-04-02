@@ -187,6 +187,11 @@ if command -v systemctl >/dev/null 2>&1; then
   "${SUDO[@]}" systemctl start docker >/dev/null 2>&1 || true
 fi
 
+if "${SUDO[@]}" docker ps -a --format "{{.Names}}" | grep -Fxq "$CONTAINER_NAME"; then
+  log "Removing existing container before syncing assets: $CONTAINER_NAME"
+  "${SUDO[@]}" docker rm -f "$CONTAINER_NAME" >/dev/null
+fi
+
 log "Preparing project directories"
 mkdir -p "$PROJECT_ROOT/ssh_keys" "$PROJECT_ROOT/clash" "$DOCKER_CONTEXT_DIR" "$WORKSPACE_HOST_DIR"
 cp "$SSH_KEY_SOURCE" "$PROJECT_ROOT/ssh_keys/cloud_key"
@@ -508,11 +513,6 @@ chmod +x "$DOCKER_CONTEXT_DIR/entrypoint.sh"
 
 log "Building Docker image: $IMAGE_NAME"
 "${SUDO[@]}" docker build -t "$IMAGE_NAME" "$DOCKER_CONTEXT_DIR"
-
-if "${SUDO[@]}" docker ps -a --format "{{.Names}}" | grep -Fxq "$CONTAINER_NAME"; then
-  log "Removing existing container: $CONTAINER_NAME"
-  "${SUDO[@]}" docker rm -f "$CONTAINER_NAME" >/dev/null
-fi
 
 log "Starting container"
 "${SUDO[@]}" docker run -d \
