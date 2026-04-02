@@ -259,5 +259,5 @@ reset
 
 ## 连接方式
 
-- Docker 模式默认连接方式：`ssh -p 2223 root@<云服务器IP>`
+- Docker 模式默认连接方式：`ssh -p 2223 <当前 Linux 用户>@<云服务器IP>`
 - Host 模式默认连接方式：`ssh -p 2223 <TARGET_USER>@<云服务器IP>`

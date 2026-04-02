@@ -113,9 +113,8 @@ tail -f /etc/ShellCrash/clash.log
 1. **在 Mac 终端执行**：
 
 ```bash
-ssh -p 2223 -L 9090:127.0.0.1:9090 root@云服务器IP -N
+ssh -p 2223 -L 9090:127.0.0.1:9090 <当前 Linux 用户>@云服务器IP -N
 ```
 
 2. **在 Mac 浏览器打开**：[http://yacd.haishan.me/](http://yacd.haishan.me/)
 3. **填入 API**：`http://127.0.0.1:9090`，即可图形化切换节点。
-

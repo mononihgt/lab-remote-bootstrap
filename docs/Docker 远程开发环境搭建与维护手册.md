@@ -167,7 +167,7 @@ sudo docker run -d \
 ---
 
 ## 5. 容器内环境配置 (Miniconda)
-1. **连接容器**：`ssh -p 2223 root@云服务器IP`
+1. **连接容器**：`ssh -p 2223 <当前 Linux 用户>@云服务器IP`
 2. **下载安装**：
 
 ```bash
@@ -233,17 +233,16 @@ Host lab-docker
     3. 按 `Ctrl+B` 然后按 `D` 离开（Detach）。
     4. 下次回来输入 `tmux attach` 恢复现场。
 
-### Q5: 如何修改 root 密码？
+### Q5: 如何修改容器登录密码？
 + **操作**：
 
 ```bash
-sudo docker exec -it lab-cpu-container passwd
+sudo docker exec -it lab-cpu-container passwd <当前 Linux 用户>
 ```
 
 直接输入新密码即可，立即生效。
 
 ### Q6: 数据存在哪里？
 + **代码/数据**：存放在 `/workspace`。对应宿主机 `~/my_project`。**安全，不会丢**。
-+ **环境/软件**：存放在 `/root` (如 miniconda)。对应容器内部存储。**删除容器后会丢失**。
++ **环境/软件**：默认存放在容器当前登录用户的 HOME 目录（如 `/home/<当前 Linux 用户>`）。对应容器内部存储。**删除容器后会丢失**。
     - _建议_：定期导出环境配置 `conda env export > /workspace/env.yml`。
-

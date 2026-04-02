@@ -36,6 +36,22 @@ CLASH_SOCKS_PORT="${CLASH_SOCKS_PORT:-7891}"
 CLASH_API_PORT="${CLASH_API_PORT:-9090}"
 TMP_FILES=()
 
+resolve_local_user() {
+  local candidate="${HOST_LOGIN_USER:-${SUDO_USER:-${USER:-}}}"
+  if [[ -n "$candidate" ]] && id "$candidate" >/dev/null 2>&1; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  id -un
+}
+
+HOST_LOGIN_USER="${HOST_LOGIN_USER:-$(resolve_local_user)}"
+HOST_UID="${HOST_UID:-$(id -u "$HOST_LOGIN_USER")}"
+HOST_GID="${HOST_GID:-$(id -g "$HOST_LOGIN_USER")}"
+HOST_GROUP="${HOST_GROUP:-$(id -gn "$HOST_LOGIN_USER")}"
+CONTAINER_USER="${CONTAINER_USER:-$HOST_LOGIN_USER}"
+CONTAINER_GROUP="${CONTAINER_GROUP:-$HOST_GROUP}"
+
 normalize_clash_source_dir() {
   local path="${1:-}"
   if [[ -z "$path" || "$path" == "/path/to/lab-remote-bootstrap/assets/clash" ]]; then
@@ -218,9 +234,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /var/run/sshd /root/.ssh /opt/clash /workspace
-RUN mkdir -p /root/.zsh/plugins /root/.zsh/themes \
-    && git clone --depth=1 https://github.com/zsh-users/zsh-completions /root/.zsh/plugins/zsh-completions || true \
-    && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /root/.zsh/themes/powerlevel10k || true
+RUN mkdir -p /opt/lab-zsh/plugins /opt/lab-zsh/themes \
+    && git clone --depth=1 https://github.com/zsh-users/zsh-completions /opt/lab-zsh/plugins/zsh-completions || true \
+    && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /opt/lab-zsh/themes/powerlevel10k || true
 RUN chsh -s /usr/bin/zsh root || true
 
 COPY entrypoint.sh /entrypoint.sh
@@ -244,6 +260,14 @@ set -euo pipefail
 : "${CLASH_HTTP_PORT:=7890}"
 : "${CLASH_SOCKS_PORT:=7891}"
 : "${CLASH_API_PORT:=9090}"
+: "${HOST_UID:?HOST_UID is required}"
+: "${HOST_GID:?HOST_GID is required}"
+: "${CONTAINER_USER:?CONTAINER_USER is required}"
+: "${CONTAINER_GROUP:?CONTAINER_GROUP is required}"
+
+LOGIN_USER=""
+LOGIN_GROUP=""
+LOGIN_HOME=""
 
 set_yaml_scalar() {
   local file="$1"
@@ -265,7 +289,8 @@ configure_clash_ports() {
 }
 
 write_zshrc() {
-  cat > /root/.zshrc <<ZSHRC
+  local target_home="$1"
+  cat > "${target_home}/.zshrc" <<ZSHRC
 # ---- Lab Docker managed zshrc ----
 export CLASH_HTTP_PORT=${CLASH_HTTP_PORT}
 export CLASH_SOCKS_PORT=${CLASH_SOCKS_PORT}
@@ -280,8 +305,8 @@ export FTP_PROXY="http://127.0.0.1:${CLASH_HTTP_PORT}"
 export all_proxy="socks5://127.0.0.1:${CLASH_SOCKS_PORT}"
 export ALL_PROXY="socks5://127.0.0.1:${CLASH_SOCKS_PORT}"
 
-if [[ -d /root/.zsh/plugins/zsh-completions/src ]]; then
-  fpath=(/root/.zsh/plugins/zsh-completions/src \$fpath)
+if [[ -d /opt/lab-zsh/plugins/zsh-completions/src ]]; then
+  fpath=(/opt/lab-zsh/plugins/zsh-completions/src \$fpath)
 fi
 autoload -Uz compinit
 compinit
@@ -300,16 +325,8 @@ setopt hist_verify
 bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
 
-if [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
-  source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-elif [[ -r /root/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
-  source /root/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-fi
-if [[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
-  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-elif [[ -r /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
-  source /root/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-fi
+[[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+[[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 if command -v fzf >/dev/null 2>&1; then
   eval "\$(fzf --zsh)" 2>/dev/null || true
@@ -345,9 +362,9 @@ else
   alias l='ls -CF'
 fi
 
-if [[ -r /root/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
+if [[ -r /opt/lab-zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
   export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
-  source /root/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme
+  source /opt/lab-zsh/themes/powerlevel10k/powerlevel10k.zsh-theme
   [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 else
   PROMPT='%F{cyan}%n@%m%f:%F{yellow}%~%f %# '
@@ -359,18 +376,84 @@ if [[ -o interactive ]] && command -v fastfetch >/dev/null 2>&1; then
   fastfetch
 fi
 ZSHRC
-  chmod 644 /root/.zshrc
+  chmod 644 "${target_home}/.zshrc"
+}
+
+ensure_login_group() {
+  local desired_group="$1"
+  local desired_gid="$2"
+  local existing_group
+
+  existing_group="$(getent group "$desired_gid" | cut -d: -f1 || true)"
+  if [[ -n "$existing_group" ]]; then
+    LOGIN_GROUP="$existing_group"
+    return 0
+  fi
+
+  if getent group "$desired_group" >/dev/null 2>&1; then
+    groupmod -g "$desired_gid" "$desired_group"
+  else
+    groupadd -g "$desired_gid" "$desired_group"
+  fi
+  LOGIN_GROUP="$desired_group"
+}
+
+ensure_login_user() {
+  local desired_user="$1"
+  local desired_uid="$2"
+  local login_group="$3"
+  local existing_user
+  local passwd_entry
+  local home_dir
+
+  existing_user="$(getent passwd "$desired_uid" | cut -d: -f1 || true)"
+  if [[ -n "$existing_user" ]]; then
+    LOGIN_USER="$existing_user"
+    passwd_entry="$(getent passwd "$LOGIN_USER")"
+    LOGIN_HOME="$(printf '%s' "$passwd_entry" | cut -d: -f6)"
+    usermod -g "$login_group" -s /usr/bin/zsh "$LOGIN_USER" || true
+  else
+    home_dir="/home/$desired_user"
+    if id -u "$desired_user" >/dev/null 2>&1; then
+      usermod -u "$desired_uid" -g "$login_group" -d "$home_dir" -m -s /usr/bin/zsh "$desired_user"
+    else
+      useradd -m -u "$desired_uid" -g "$login_group" -s /usr/bin/zsh "$desired_user"
+    fi
+    LOGIN_USER="$desired_user"
+    LOGIN_HOME="$home_dir"
+  fi
+
+  [[ -n "$LOGIN_HOME" ]] || LOGIN_HOME="/home/$LOGIN_USER"
+  mkdir -p "$LOGIN_HOME"
+  chown "$desired_uid:$HOST_GID" "$LOGIN_HOME"
+}
+
+configure_login_user() {
+  ensure_login_group "$CONTAINER_GROUP" "$HOST_GID"
+  ensure_login_user "$CONTAINER_USER" "$HOST_UID" "$LOGIN_GROUP"
+
+  if [[ "$LOGIN_USER" != "root" ]]; then
+    usermod -aG sudo "$LOGIN_USER" || true
+    echo "${LOGIN_USER}:${ROOT_PASSWORD}" | chpasswd
+    cat > /etc/sudoers.d/90-lab-user <<SUDOERS
+${LOGIN_USER} ALL=(ALL) NOPASSWD:ALL
+SUDOERS
+    chmod 440 /etc/sudoers.d/90-lab-user
+  fi
 }
 
 ln -snf "/usr/share/zoneinfo/${CONTAINER_TIMEZONE}" /etc/localtime || true
 echo "${CONTAINER_TIMEZONE}" > /etc/timezone || true
 
 echo "root:${ROOT_PASSWORD}" | chpasswd
+configure_login_user
+write_zshrc /root
+write_zshrc "$LOGIN_HOME"
 
 # Ensure SSH server settings are explicit.
-sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-grep -q '^PermitRootLogin' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+grep -q '^PermitRootLogin' /etc/ssh/sshd_config || echo 'PermitRootLogin no' >> /etc/ssh/sshd_config
 grep -q '^PasswordAuthentication' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
 
 if [[ ! -f /root/.ssh/cloud_key ]]; then
@@ -384,7 +467,6 @@ chmod 600 /root/id_key_internal
 mkdir -p /var/log
 touch /var/log/clash.log
 configure_clash_ports
-write_zshrc
 
 if [[ -x /opt/clash/CrashCore && -f /opt/clash/config.yaml ]]; then
   pkill -f '/opt/clash/CrashCore' >/dev/null 2>&1 || true
@@ -445,6 +527,10 @@ log "Starting container"
   -e CLASH_HTTP_PORT="$CLASH_HTTP_PORT" \
   -e CLASH_SOCKS_PORT="$CLASH_SOCKS_PORT" \
   -e CLASH_API_PORT="$CLASH_API_PORT" \
+  -e HOST_UID="$HOST_UID" \
+  -e HOST_GID="$HOST_GID" \
+  -e CONTAINER_USER="$CONTAINER_USER" \
+  -e CONTAINER_GROUP="$CONTAINER_GROUP" \
   -v "$PROJECT_ROOT/ssh_keys/cloud_key:/root/.ssh/cloud_key:ro" \
   -v "$PROJECT_ROOT/clash:/opt/clash" \
   -v "$WORKSPACE_HOST_DIR:/workspace" \
@@ -459,7 +545,7 @@ for _ in {1..10}; do
 done
 
 if run_cloud_cmd "ss -tnl | grep -E ':${REVERSE_PORT}\\s'" >/dev/null 2>&1; then
-  log "Done. Connect from local machine: ssh -p ${REVERSE_PORT} root@${CLOUD_HOST}"
+  log "Done. Connect from local machine: ssh -p ${REVERSE_PORT} ${CONTAINER_USER}@${CLOUD_HOST}"
 else
   echo "[WARN] Tunnel port ${REVERSE_PORT} not detected on cloud host."
   echo "       Check cloud sshd_config: AllowTcpForwarding yes, GatewayPorts clientspecified"
@@ -472,7 +558,7 @@ log "Container logs"
 cat <<EOT
 
 Next checks:
-1) ssh -p ${REVERSE_PORT} root@${CLOUD_HOST}
+1) ssh -p ${REVERSE_PORT} ${CONTAINER_USER}@${CLOUD_HOST}
 2) Inside container, run: curl -I https://www.google.com
 3) View Clash log: ${SUDO[*]:-} docker exec -it ${CONTAINER_NAME} tail -n 50 /var/log/clash.log
 4) Confirm shell/proxy: ${SUDO[*]:-} docker exec -it ${CONTAINER_NAME} zsh -lc 'echo $SHELL && echo $http_proxy'
