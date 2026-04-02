@@ -205,46 +205,38 @@ detect_pkg_manager() {
 
 install_core_packages() {
   local pm="$1"
+  local optional_pkg
   case "$pm" in
     apt-get)
       "${SUDO[@]}" apt-get update
-      "${SUDO[@]}" apt-get install -y autossh curl git openssh-client openssh-server python3 tmux zsh
-      "${SUDO[@]}" apt-get install -y fzf fd-find zoxide >/dev/null 2>&1 || true
-      "${SUDO[@]}" apt-get install -y eza >/dev/null 2>&1 || true
-      "${SUDO[@]}" apt-get install -y exa >/dev/null 2>&1 || true
-      "${SUDO[@]}" apt-get install -y fastfetch >/dev/null 2>&1 || true
+      for optional_pkg in autossh curl git openssh-client openssh-server python3 tmux zsh fzf fd-find zoxide eza exa fastfetch; do
+        "${SUDO[@]}" apt-get install -y "$optional_pkg" >/dev/null 2>&1 || echo "[WARN] Skipping unavailable apt package: $optional_pkg"
+      done
       ;;
     dnf)
-      "${SUDO[@]}" dnf install -y autossh curl git openssh-clients openssh-server python3 tmux zsh
-      "${SUDO[@]}" dnf install -y fzf fd-find zoxide >/dev/null 2>&1 || true
-      "${SUDO[@]}" dnf install -y eza >/dev/null 2>&1 || true
-      "${SUDO[@]}" dnf install -y exa >/dev/null 2>&1 || true
-      "${SUDO[@]}" dnf install -y fastfetch >/dev/null 2>&1 || true
+      for optional_pkg in autossh curl git openssh-clients openssh-server python3 tmux zsh fzf fd-find zoxide eza exa fastfetch; do
+        "${SUDO[@]}" dnf install -y "$optional_pkg" >/dev/null 2>&1 || echo "[WARN] Skipping unavailable dnf package: $optional_pkg"
+      done
       ;;
     yum)
-      "${SUDO[@]}" yum install -y autossh curl git openssh-clients openssh-server python3 tmux zsh
-      "${SUDO[@]}" yum install -y fzf zoxide >/dev/null 2>&1 || true
-      "${SUDO[@]}" yum install -y fd-find >/dev/null 2>&1 || true
-      "${SUDO[@]}" yum install -y eza >/dev/null 2>&1 || true
-      "${SUDO[@]}" yum install -y exa >/dev/null 2>&1 || true
-      "${SUDO[@]}" yum install -y fastfetch >/dev/null 2>&1 || true
+      for optional_pkg in autossh curl git openssh-clients openssh-server python3 tmux zsh fzf zoxide fd-find eza exa fastfetch; do
+        "${SUDO[@]}" yum install -y "$optional_pkg" >/dev/null 2>&1 || echo "[WARN] Skipping unavailable yum package: $optional_pkg"
+      done
       ;;
     pacman)
-      "${SUDO[@]}" pacman -Sy --noconfirm autossh curl git openssh python tmux zsh
-      "${SUDO[@]}" pacman -Sy --noconfirm fzf fd zoxide eza >/dev/null 2>&1 || true
-      "${SUDO[@]}" pacman -Sy --noconfirm fastfetch >/dev/null 2>&1 || true
+      for optional_pkg in autossh curl git openssh python tmux zsh fzf fd zoxide eza exa fastfetch; do
+        "${SUDO[@]}" pacman -Sy --noconfirm "$optional_pkg" >/dev/null 2>&1 || echo "[WARN] Skipping unavailable pacman package: $optional_pkg"
+      done
       ;;
     zypper)
-      "${SUDO[@]}" zypper --non-interactive install autossh curl git openssh python3 tmux zsh
-      "${SUDO[@]}" zypper --non-interactive install fzf fd zoxide eza >/dev/null 2>&1 || true
-      "${SUDO[@]}" zypper --non-interactive install exa >/dev/null 2>&1 || true
-      "${SUDO[@]}" zypper --non-interactive install fastfetch >/dev/null 2>&1 || true
+      for optional_pkg in autossh curl git openssh python3 tmux zsh fzf fd zoxide eza exa fastfetch; do
+        "${SUDO[@]}" zypper --non-interactive install "$optional_pkg" >/dev/null 2>&1 || echo "[WARN] Skipping unavailable zypper package: $optional_pkg"
+      done
       ;;
     apk)
-      "${SUDO[@]}" apk add autossh curl git openssh python3 tmux zsh
-      "${SUDO[@]}" apk add fzf fd zoxide eza >/dev/null 2>&1 || true
-      "${SUDO[@]}" apk add exa >/dev/null 2>&1 || true
-      "${SUDO[@]}" apk add fastfetch >/dev/null 2>&1 || true
+      for optional_pkg in autossh curl git openssh python3 tmux zsh fzf fd zoxide eza exa fastfetch; do
+        "${SUDO[@]}" apk add "$optional_pkg" >/dev/null 2>&1 || echo "[WARN] Skipping unavailable apk package: $optional_pkg"
+      done
       ;;
     *)
       echo "[ERROR] Unsupported package manager: $pm"

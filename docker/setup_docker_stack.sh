@@ -212,30 +212,42 @@ RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && 
     sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
 
 RUN apt-get update && apt-get install -y \
-    autossh \
     ca-certificates \
     curl \
-    fd-find \
-    fzf \
-    git \
-    iputils-ping \
-    openssh-server \
-    procps \
-    python3 \
-    python3-pip \
-    python3-venv \
-    ripgrep \
-    sudo \
-    tmux \
-    tzdata \
-    vim \
-    wget \
-    zoxide \
-    zsh \
-    zsh-autosuggestions \
-    zsh-syntax-highlighting \
-    exa \
-    && if apt-cache show fastfetch >/dev/null 2>&1; then apt-get install -y fastfetch; fi \
+    && install_pkg_if_available() { \
+         pkg="$1"; \
+         if apt-cache show "$pkg" >/dev/null 2>&1; then \
+           apt-get install -y "$pkg"; \
+         else \
+           echo "[WARN] Skipping unavailable apt package: $pkg"; \
+         fi; \
+       }; \
+    for pkg in \
+      autossh \
+      fd-find \
+      fzf \
+      git \
+      iputils-ping \
+      openssh-server \
+      procps \
+      python3 \
+      python3-pip \
+      python3-venv \
+      ripgrep \
+      sudo \
+      tmux \
+      tzdata \
+      vim \
+      wget \
+      zoxide \
+      zsh \
+      zsh-autosuggestions \
+      zsh-syntax-highlighting \
+      exa \
+      eza \
+      fastfetch; do \
+      install_pkg_if_available "$pkg"; \
+    done \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /var/run/sshd /root/.ssh /opt/clash /workspace
