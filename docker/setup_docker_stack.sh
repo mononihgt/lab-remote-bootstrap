@@ -346,7 +346,14 @@ bindkey '^[[B' history-search-forward
 [[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 if command -v fzf >/dev/null 2>&1; then
-  eval "\$(fzf --zsh)" 2>/dev/null || true
+  if fzf --help 2>/dev/null | grep -q -- '--zsh'; then
+    eval "\$(fzf --zsh)" 2>/dev/null || true
+  else
+    [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]] && source /usr/share/doc/fzf/examples/key-bindings.zsh
+    [[ -r /usr/share/doc/fzf/examples/completion.zsh ]] && source /usr/share/doc/fzf/examples/completion.zsh
+    [[ -r /usr/share/fzf/key-bindings.zsh ]] && source /usr/share/fzf/key-bindings.zsh
+    [[ -r /usr/share/fzf/completion.zsh ]] && source /usr/share/fzf/completion.zsh
+  fi
   if command -v fd >/dev/null 2>&1; then
     export FZF_DEFAULT_COMMAND='fd --hidden --strip-cwd-prefix --exclude .git'
     export FZF_CTRL_T_COMMAND="\$FZF_DEFAULT_COMMAND"
@@ -369,10 +376,10 @@ if command -v eza >/dev/null 2>&1; then
   alias la='eza -a --icons=auto'
   alias l='eza -1 --icons=auto'
 elif command -v exa >/dev/null 2>&1; then
-  alias ls='exa --icons=auto'
-  alias ll='exa -alF --icons=auto'
-  alias la='exa -a --icons=auto'
-  alias l='exa -1 --icons=auto'
+  alias ls='exa --icons'
+  alias ll='exa -alF --icons'
+  alias la='exa -a --icons'
+  alias l='exa -1 --icons'
 else
   alias ll='ls -alF'
   alias la='ls -A'
