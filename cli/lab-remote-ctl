@@ -189,16 +189,73 @@ def subscription():
 @click.pass_context
 def subscription_add(ctx, name, url, template):
     """Add a new subscription."""
-    print_info("Subscription management not yet implemented")
-    print_info("This will be implemented in Phase 2-3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    from subscription import Subscription
+    from utils import get_project_root
+
+    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
+    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+
+    try:
+        sub_manager = Subscription(subscriptions_file)
+        sub = sub_manager.add(name, url, template)
+        print_success(f"Added subscription: {name}")
+        print_info(f"  URL: {url}")
+        print_info(f"  Template: {template}")
+        print_info(f"\nRun 'lab-remote-ctl subscription update {name}' to download and activate")
+    except Exception as e:
+        print_error(f"Failed to add subscription: {e}")
+        sys.exit(1)
 
 
 @subscription.command('list')
 @click.pass_context
 def subscription_list(ctx):
     """List all subscriptions."""
-    print_info("Subscription management not yet implemented")
-    print_info("This will be implemented in Phase 2-3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    from subscription import Subscription
+
+    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
+    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+
+    try:
+        sub_manager = Subscription(subscriptions_file)
+        subs = sub_manager.list()
+
+        if not subs:
+            print_info("No subscriptions found")
+            print_info("Add one with: lab-remote-ctl subscription add <name> <url>")
+            return
+
+        active = sub_manager.data.get('active')
+        click.echo("\n📡 Subscriptions:\n")
+
+        for sub in subs:
+            status_marker = "✓" if sub['name'] == active else "○"
+            status_text = "[Active]" if sub['name'] == active else ""
+
+            click.echo(f"  {status_marker} {sub['name']} {status_text}")
+            click.echo(f"     URL: {sub['url']}")
+            if sub['last_update']:
+                click.echo(f"     Updated: {sub['last_update']}")
+                click.echo(f"     Nodes: {sub['node_count']}")
+            else:
+                click.echo(f"     Status: Not yet updated")
+            click.echo()
+
+    except Exception as e:
+        print_error(f"Failed to list subscriptions: {e}")
+        sys.exit(1)
 
 
 @subscription.command('activate')
@@ -206,8 +263,25 @@ def subscription_list(ctx):
 @click.pass_context
 def subscription_activate(ctx, name):
     """Activate a subscription."""
-    print_info("Subscription management not yet implemented")
-    print_info("This will be implemented in Phase 2-3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    from subscription import Subscription
+
+    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
+    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+
+    try:
+        sub_manager = Subscription(subscriptions_file)
+        sub_manager.activate(name)
+        print_success(f"Activated subscription: {name}")
+        print_info("Restart Clash service to apply changes")
+    except Exception as e:
+        print_error(f"Failed to activate subscription: {e}")
+        sys.exit(1)
 
 
 @subscription.command('update')
@@ -215,8 +289,37 @@ def subscription_activate(ctx, name):
 @click.pass_context
 def subscription_update(ctx, name):
     """Update a subscription."""
-    print_info("Subscription management not yet implemented")
-    print_info("This will be implemented in Phase 2-3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    from subscription import Subscription
+    from utils import get_project_root
+
+    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
+    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+    config_file = f"{install_root}/clash/config.yaml"
+
+    project_root = get_project_root()
+    template_dir = str(project_root / "assets" / "clash" / "templates")
+
+    try:
+        sub_manager = Subscription(subscriptions_file)
+        print_info(f"Updating subscription: {name}")
+
+        sub_type, node_count = sub_manager.update(name, template_dir, config_file)
+
+        print_success(f"Subscription updated: {name}")
+        print_info(f"  Type: {sub_type}")
+        print_info(f"  Nodes: {node_count}")
+        print_info(f"  Config: {config_file}")
+        print_info("\nRestart Clash service to apply changes")
+
+    except Exception as e:
+        print_error(f"Failed to update subscription: {e}")
+        sys.exit(1)
 
 
 @subscription.command('remove')
@@ -224,8 +327,28 @@ def subscription_update(ctx, name):
 @click.pass_context
 def subscription_remove(ctx, name):
     """Remove a subscription."""
-    print_info("Subscription management not yet implemented")
-    print_info("This will be implemented in Phase 2-3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    from subscription import Subscription
+
+    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
+    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+
+    if not click.confirm(f"Remove subscription '{name}'?"):
+        print_info("Cancelled")
+        return
+
+    try:
+        sub_manager = Subscription(subscriptions_file)
+        sub_manager.remove(name)
+        print_success(f"Removed subscription: {name}")
+    except Exception as e:
+        print_error(f"Failed to remove subscription: {e}")
+        sys.exit(1)
 
 
 @cli.command()
@@ -233,8 +356,31 @@ def subscription_remove(ctx, name):
 @click.pass_context
 def health(ctx, output_json):
     """Run health check."""
-    print_info("Health check not yet implemented")
-    print_info("This will be implemented in Phase 2")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        print_info("Health check requires a valid configuration")
+        sys.exit(1)
+
+    from health import HealthCheck
+
+    try:
+        checker = HealthCheck(config)
+        results = checker.run_all(check_connectivity=True)
+
+        if output_json:
+            click.echo(checker.format_json(results))
+        else:
+            click.echo(checker.format_terminal(results))
+
+        # Exit with error code if checks failed
+        if results['summary']['failed'] > 0:
+            sys.exit(1)
+
+    except Exception as e:
+        print_error(f"Health check failed: {e}")
+        sys.exit(1)
 
 
 @cli.group()
