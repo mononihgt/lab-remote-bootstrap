@@ -417,24 +417,75 @@ def web():
 @click.pass_context
 def web_start(ctx):
     """Start web service."""
-    print_info("Web management not yet implemented")
-    print_info("This will be implemented in Phase 3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    host = config.get('cloud.host')
+    user = config.get('cloud.user')
+    identity_file = config.get('autossh.identity_file')
+    reverse_port = config.get('cloud.reverse_port', 2223)
+
+    from utils import run_ssh_command
+
+    cmd = "sudo systemctl start lab-web.service"
+    returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
+
+    if returncode == 0:
+        print_success("Web service started")
+        web_port = config.get('web.port', 5000)
+        print_info(f"Access at: http://localhost:{web_port}")
+    else:
+        print_error(f"Failed to start web service: {stderr}")
+        sys.exit(1)
 
 
 @web.command('stop')
 @click.pass_context
 def web_stop(ctx):
     """Stop web service."""
-    print_info("Web management not yet implemented")
-    print_info("This will be implemented in Phase 3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    host = config.get('cloud.host')
+    user = config.get('cloud.user')
+    identity_file = config.get('autossh.identity_file')
+    reverse_port = config.get('cloud.reverse_port', 2223)
+
+    from utils import run_ssh_command
+
+    cmd = "sudo systemctl stop lab-web.service"
+    returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
+
+    if returncode == 0:
+        print_success("Web service stopped")
+    else:
+        print_error(f"Failed to stop web service: {stderr}")
+        sys.exit(1)
 
 
 @web.command('open')
 @click.pass_context
 def web_open(ctx):
     """Open web interface."""
-    print_info("Web management not yet implemented")
-    print_info("This will be implemented in Phase 3")
+    try:
+        config = load_config(ctx.obj.get('config_path'))
+    except ConfigError as e:
+        print_error(f"Configuration error: {e}")
+        sys.exit(1)
+
+    web_port = config.get('web.port', 5000)
+    web_url = f"http://localhost:{web_port}"
+
+    print_info(f"Opening web interface: {web_url}")
+
+    import webbrowser
+    webbrowser.open(web_url)
 
 
 @cli.command()

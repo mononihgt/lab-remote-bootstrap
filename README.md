@@ -1,18 +1,17 @@
 # Lab Remote Bootstrap
 
-> **🚀 新版本 v2.0 正在开发中**  
-> 新版本采用模块化架构，提供 CLI 工具 `lab-remote-ctl` 和 Web 管理界面。
+> **🚀 新版本 v2.0 已完成！**  
+> 全新模块化架构，提供强大的 CLI 工具 `lab-remote-ctl` 和现代化 Web 管理界面。
 > 
-> **新功能**：
-> - 统一配置管理（YAML 格式）
-> - Clash 订阅管理（支持 Base64 和 YAML 订阅）
-> - Web 管理界面（Flask + Catppuccin Mocha 主题）
-> - 个性化 Zsh 配置同步
-> - 健康检查系统
+> **核心功能**：
+> - ✅ 统一配置管理（YAML 格式 + JSON Schema 验证）
+> - ✅ Clash 订阅管理（支持 Base64 编码订阅和 YAML 订阅）
+> - ✅ Web 管理界面（Flask + Catppuccin Mocha 主题）
+> - ✅ 个性化 Zsh 配置同步（fzf, eza, bat, tldr, fastfetch）
+> - ✅ 健康检查系统（服务/端口/连通性）
+> - ✅ 配置迁移工具（从旧版本 .env 迁移）
 > 
 > 查看 [设计文档](docs/superpowers/specs/2026-07-01-modular-refactor-design.md) 了解详情。
->
-> **当前状态**：阶段 1（基础架构）已完成，CLI 工具骨架和配置系统可用。
 >
 > ---
 
@@ -29,7 +28,7 @@
 
 ---
 
-## 快速开始（新架构 - 开发中）
+## 快速开始（新架构 v2.0）
 
 ### 安装依赖
 
@@ -38,24 +37,116 @@
 pip3 install -r requirements.txt
 ```
 
-### 初始化配置
+### 方式 1：全新部署
+
+#### 1. 初始化配置
 
 ```bash
-# 交互式配置向导
+# 交互式配置向导（推荐）
 ./cli/lab-remote-ctl init --interactive
 
-# 或使用模板
+# 或使用模板然后手动编辑
 ./cli/lab-remote-ctl init
-# 然后编辑 config/config.yaml
+vim config/config.yaml
 ```
 
-### 查看可用命令
+#### 2. 准备 Clash 资源（可选）
+
+将以下文件放入 `assets/clash/`：
+- Clash 内核二进制（mihomo、clash 等）- 如果没有，部署时会自动下载
+- `geoip.dat` 和 `geosite.dat` - 如果没有，部署时会自动下载
+
+#### 3. 部署到远程服务器
 
 ```bash
-./cli/lab-remote-ctl --help
+# 完整部署（Clash + AutoSSH + Zsh + Web）
+./cli/lab-remote-ctl deploy
+
+# 选择性部署
+./cli/lab-remote-ctl deploy --skip-web  # 跳过 Web 界面
+./cli/lab-remote-ctl deploy --dry-run   # 预览部署计划
 ```
 
-**注意**：部署、订阅管理、Web 界面等功能正在开发中。
+#### 4. 管理订阅
+
+```bash
+# 添加订阅
+./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription
+
+# 更新订阅（下载并生成配置）
+./cli/lab-remote-ctl subscription update "主力节点"
+
+# 查看所有订阅
+./cli/lab-remote-ctl subscription list
+
+# 激活订阅
+./cli/lab-remote-ctl subscription activate "主力节点"
+```
+
+#### 5. 健康检查
+
+```bash
+# 检查系统健康状态
+./cli/lab-remote-ctl health
+
+# JSON 格式输出
+./cli/lab-remote-ctl health --json
+```
+
+#### 6. Web 管理界面
+
+```bash
+# 启动 Web 服务
+./cli/lab-remote-ctl web start
+
+# 在浏览器中打开
+./cli/lab-remote-ctl web open
+
+# 停止 Web 服务
+./cli/lab-remote-ctl web stop
+```
+
+### 方式 2：从旧版本迁移
+
+```bash
+# 迁移旧版本配置
+./cli/lab-remote-ctl migrate host/host-stack.env
+
+# 预览迁移（不写入文件）
+./cli/lab-remote-ctl migrate host/host-stack.env --dry-run
+
+# 然后正常部署
+./cli/lab-remote-ctl deploy
+```
+
+### CLI 命令总览
+
+```bash
+lab-remote-ctl
+├── init              # 初始化配置
+├── deploy            # 部署到远程服务器
+├── subscription      # 订阅管理
+│   ├── add          # 添加订阅
+│   ├── list         # 列出所有订阅
+│   ├── activate     # 激活订阅
+│   ├── update       # 更新订阅
+│   └── remove       # 删除订阅
+├── health            # 健康检查
+├── web               # Web 服务管理
+│   ├── start        # 启动服务
+│   ├── stop         # 停止服务
+│   └── open         # 打开界面
+└── migrate           # 配置迁移
+```
+
+### 订阅格式支持
+
+新版本支持以下订阅格式：
+
+1. **Base64 编码订阅**：包含 vmess://、ss://、trojan:// 等协议的 Base64 编码链接
+2. **Clash YAML 订阅**：直接提供 Clash proxies 的 YAML 格式
+
+订阅会自动转换为 Clash 配置，并根据选择的模板（minimal/balanced/full）生成规则。
 
 ---
 

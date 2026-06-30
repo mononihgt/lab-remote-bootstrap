@@ -10,6 +10,7 @@ from config import Config
 from modules.clash_module import ClashModule
 from modules.autossh_module import AutoSSHModule
 from modules.zsh_module import ZshModule
+from modules.web_module import WebModule
 from utils import print_error, print_info, print_success, print_warning
 
 
@@ -62,7 +63,7 @@ class Deployer:
             return self._dry_run_deploy(skip_clash, skip_autossh, skip_zsh, skip_web)
 
         # Phase 1: Validation
-        if not self._validate_all(skip_clash, skip_autossh, skip_zsh):
+        if not self._validate_all(skip_clash, skip_autossh, skip_zsh, skip_web):
             return False
 
         # Phase 2: Deploy modules
@@ -96,10 +97,14 @@ class Deployer:
                     # Zsh failure is not critical, continue
                     print_warning("Continuing despite Zsh deployment failure")
 
-            # Deploy Web (placeholder)
+            # Deploy Web
             if not skip_web:
-                print_info("[6/6] Web interface deployment")
-                print_warning("Web interface not yet implemented (Phase 3)")
+                if self._deploy_module('web', WebModule):
+                    deployed_modules.append('web')
+                else:
+                    print_error("Web interface deployment failed")
+                    # Web failure is not critical, continue
+                    print_warning("Continuing despite Web deployment failure")
 
             # Phase 3: Verification
             print_info("\n[7/7] Deployment verification")
@@ -132,7 +137,7 @@ class Deployer:
             self._rollback_modules(deployed_modules)
             return False
 
-    def _validate_all(self, skip_clash: bool, skip_autossh: bool, skip_zsh: bool) -> bool:
+    def _validate_all(self, skip_clash: bool, skip_autossh: bool, skip_zsh: bool, skip_web: bool = False) -> bool:
         """Validate all modules."""
         print_info("[1/7] Pre-deployment validation")
 
@@ -143,6 +148,8 @@ class Deployer:
             modules_to_validate.append(('autossh', AutoSSHModule))
         if not skip_zsh:
             modules_to_validate.append(('zsh', ZshModule))
+        if not skip_web:
+            modules_to_validate.append(('web', WebModule))
 
         for name, module_class in modules_to_validate:
             module = module_class(self.config, self.verbose)
@@ -164,7 +171,8 @@ class Deployer:
         phase_names = {
             'clash': '[2/7] Clash proxy deployment',
             'autossh': '[3/7] AutoSSH tunnel deployment',
-            'zsh': '[4/7] Zsh configuration deployment'
+            'zsh': '[4/7] Zsh configuration deployment',
+            'web': '[5/7] Web interface deployment'
         }
 
         print_info(f"\n{phase_names.get(name, f'{name.capitalize()} deployment')}")
@@ -226,7 +234,10 @@ class Deployer:
 
         if not skip_web:
             print_info(f"[{step}/6] Web interface")
-            print_info("  - (Not yet implemented)\n")
+            print_info("  - Upload web application")
+            print_info("  - Install Python dependencies")
+            print_info("  - Create systemd service")
+            print_info("  - Start service\n")
             step += 1
 
         print_info(f"[{step}/6] Health check")
