@@ -1,0 +1,69 @@
+# Lab Remote Bootstrap Configuration
+# Copy this file to config.yaml and customize for your setup
+
+# Deployment mode: 'host' or 'docker'
+deployment:
+  mode: host
+
+# Cloud server configuration (for reverse SSH tunnel)
+cloud:
+  host: cloud.example.com
+  user: ubuntu
+  reverse_port: 2223
+
+# Clash proxy configuration
+clash:
+  install_root: /opt/lab-remote-stack
+  http_port: 7890
+  socks_port: 7891
+  api_port: 9090
+  api_secret: ""
+
+  # Subscription settings
+  subscription:
+    # Default template: minimal, balanced, or full
+    template: balanced
+    auto_update: false
+    update_interval: 86400  # seconds (24 hours)
+
+# AutoSSH reverse tunnel configuration
+autossh:
+  identity_file: ~/.ssh/id_ed25519_autossh
+  monitor_port: 20000
+
+# Zsh terminal configuration
+zsh:
+  enable_plugins: true
+  custom_config:
+    # zsh-autosuggestions style
+    autosuggestions_style: "fg=240"
+
+    # fzf color theme
+    fzf_theme:
+      fg: "#CBE0F0"
+      bg: "#011628"
+      bg_highlight: "#143652"
+      purple: "#B388FF"
+      blue: "#06BCE4"
+      cyan: "#2CF9ED"
+
+    # bat theme
+    bat_theme: "tokyonight_night"
+
+    # Enable enhanced aliases
+    eza_aliases: true
+    tldr_alias: true
+    fastfetch_on_startup: true
+
+# Web management interface
+web:
+  enabled: true
+  port: 5000
+  bind: 127.0.0.1
+
+# Docker mode specific settings (only used when deployment.mode = docker)
+docker:
+  container_name: lab-remote-dev
+  root_password: changeme
+  host_ssh_port: 2222
+  target_user: developer

@@ -1,0 +1,23 @@
+# Lab Remote Bootstrap Python Dependencies
+
+# CLI framework
+click>=8.0.0
+
+# Configuration parsing
+PyYAML>=6.0
+
+# Configuration validation
+jsonschema>=4.0.0
+
+# Terminal UI
+rich>=13.0.0
+
+# HTTP requests (for subscription download)
+requests>=2.28.0
+
+# Flask web framework (for web interface)
+Flask>=2.0.0
+Flask-CORS>=4.0.0
+
+# SSH operations (optional, falls back to system ssh)
+# paramiko>=3.0.0

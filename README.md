@@ -1,5 +1,21 @@
 # Lab Remote Bootstrap
 
+> **🚀 新版本 v2.0 正在开发中**  
+> 新版本采用模块化架构，提供 CLI 工具 `lab-remote-ctl` 和 Web 管理界面。
+> 
+> **新功能**：
+> - 统一配置管理（YAML 格式）
+> - Clash 订阅管理（支持 Base64 和 YAML 订阅）
+> - Web 管理界面（Flask + Catppuccin Mocha 主题）
+> - 个性化 Zsh 配置同步
+> - 健康检查系统
+> 
+> 查看 [设计文档](docs/superpowers/specs/2026-07-01-modular-refactor-design.md) 了解详情。
+>
+> **当前状态**：阶段 1（基础架构）已完成，CLI 工具骨架和配置系统可用。
+>
+> ---
+
 用于在实验室服务器上部署以下组件，并提供统一的初始化脚本：
 
 - Clash
@@ -10,6 +26,42 @@
 
 1. **Docker 模式**：在宿主机中运行 Ubuntu 22.04 容器，适合较旧或不便直接改动的宿主机
 2. **Host 模式**：直接在宿主机安装和配置服务，适合较新的 Linux 服务器
+
+---
+
+## 快速开始（新架构 - 开发中）
+
+### 安装依赖
+
+```bash
+# 安装 Python 依赖
+pip3 install -r requirements.txt
+```
+
+### 初始化配置
+
+```bash
+# 交互式配置向导
+./cli/lab-remote-ctl init --interactive
+
+# 或使用模板
+./cli/lab-remote-ctl init
+# 然后编辑 config/config.yaml
+```
+
+### 查看可用命令
+
+```bash
+./cli/lab-remote-ctl --help
+```
+
+**注意**：部署、订阅管理、Web 界面等功能正在开发中。
+
+---
+
+## 旧版本使用方式（稳定）
+
+以下是当前稳定版本的使用方式，新架构完成前仍可使用。
 
 ---
 

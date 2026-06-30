@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Lab Remote Bootstrap Configuration",
+  "type": "object",
+  "required": ["deployment", "cloud", "clash", "autossh"],
+  "properties": {
+    "deployment": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["host", "docker"]
+        }
+      }
+    },
+    "cloud": {
+      "type": "object",
+      "required": ["host", "user"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reverse_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 2223
+        }
+      }
+    },
+    "clash": {
+      "type": "object",
+      "required": ["install_root"],
+      "properties": {
+        "install_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "http_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 7890
+        },
+        "socks_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 7891
+        },
+        "api_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 9090
+        },
+        "api_secret": {
+          "type": "string"
+        },
+        "subscription": {
+          "type": "object",
+          "properties": {
+            "template": {
+              "type": "string",
+              "default": "balanced"
+            },
+            "auto_update": {
+              "type": "boolean",
+              "default": false
+            },
+            "update_interval": {
+              "type": "integer",
+              "minimum": 60,
+              "default": 86400
+            }
+          }
+        }
+      }
+    },
+    "autossh": {
+      "type": "object",
+      "required": ["identity_file"],
+      "properties": {
+        "identity_file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "monitor_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 20000
+        }
+      }
+    },
+    "zsh": {
+      "type": "object",
+      "properties": {
+        "enable_plugins": {
+          "type": "boolean",
+          "default": true
+        },
+        "custom_config": {
+          "type": "object",
+          "properties": {
+            "autosuggestions_style": {
+              "type": "string"
+            },
+            "fzf_theme": {
+              "type": "object"
+            },
+            "bat_theme": {
+              "type": "string"
+            },
+            "eza_aliases": {
+              "type": "boolean"
+            },
+            "tldr_alias": {
+              "type": "boolean"
+            },
+            "fastfetch_on_startup": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "web": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 5000
+        },
+        "bind": {
+          "type": "string",
+          "default": "127.0.0.1"
+        }
+      }
+    },
+    "docker": {
+      "type": "object",
+      "properties": {
+        "container_name": {
+          "type": "string"
+        },
+        "root_password": {
+          "type": "string"
+        },
+        "host_ssh_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "target_user": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+# Clash Configuration - Full Template
+# Auto-generated at {{generated_time}}
+# Subscription: {{subscription_name}}
+
+port: 7890
+socks-port: 7891
+allow-lan: true
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:9090
+
+proxies:
+{{proxies}}
+
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - "AUTO"
+      - "FALLBACK"
+{{proxy_names}}
+      - DIRECT
+
+  - name: "AUTO"
+    type: url-test
+    proxies:
+{{proxy_names}}
+    url: 'http://www.gstatic.com/generate_204'
+    interval: 300
+
+  - name: "FALLBACK"
+    type: fallback
+    proxies:
+{{proxy_names}}
+    url: 'http://www.gstatic.com/generate_204'
+    interval: 300
+
+  - name: "STREAMING"
+    type: select
+    proxies:
+      - "PROXY"
+{{proxy_names}}
+
+rules:
+  # Local network
+  - DOMAIN-SUFFIX,local,DIRECT
+  - IP-CIDR,127.0.0.0/8,DIRECT
+  - IP-CIDR,172.16.0.0/12,DIRECT
+  - IP-CIDR,192.168.0.0/16,DIRECT
+  - IP-CIDR,10.0.0.0/8,DIRECT
+
+  # Streaming services
+  - DOMAIN-SUFFIX,netflix.com,STREAMING
+  - DOMAIN-KEYWORD,netflix,STREAMING
+  - DOMAIN-SUFFIX,youtube.com,STREAMING
+  - DOMAIN-KEYWORD,youtube,STREAMING
+  - DOMAIN-SUFFIX,spotify.com,STREAMING
+
+  # China direct
+  - DOMAIN-SUFFIX,cn,DIRECT
+  - DOMAIN-KEYWORD,baidu,DIRECT
+  - DOMAIN-KEYWORD,taobao,DIRECT
+  - DOMAIN-KEYWORD,tmall,DIRECT
+  - DOMAIN-KEYWORD,alipay,DIRECT
+  - DOMAIN-KEYWORD,aliyun,DIRECT
+  - DOMAIN-KEYWORD,alibaba,DIRECT
+  - DOMAIN-KEYWORD,tencent,DIRECT
+  - DOMAIN-KEYWORD,qq,DIRECT
+  - DOMAIN-KEYWORD,wechat,DIRECT
+  - DOMAIN-KEYWORD,weixin,DIRECT
+  - DOMAIN-KEYWORD,bilibili,DIRECT
+  - DOMAIN-KEYWORD,zhihu,DIRECT
+  - DOMAIN-KEYWORD,douban,DIRECT
+  - GEOIP,CN,DIRECT
+
+  # Ad blocking
+  - DOMAIN-SUFFIX,ads.google.com,REJECT
+  - DOMAIN-SUFFIX,doubleclick.net,REJECT
+  - DOMAIN-SUFFIX,googleadservices.com,REJECT
+  - DOMAIN-SUFFIX,googlesyndication.com,REJECT
+  - DOMAIN-KEYWORD,analytics,REJECT
+  - DOMAIN-KEYWORD,adservice,REJECT
+  - DOMAIN-KEYWORD,advertisement,REJECT
+  - DOMAIN-KEYWORD,tracking,REJECT
+
+  # Popular services
+  - DOMAIN-SUFFIX,github.com,PROXY
+  - DOMAIN-SUFFIX,githubusercontent.com,PROXY
+  - DOMAIN-SUFFIX,google.com,PROXY
+  - DOMAIN-SUFFIX,googleapis.com,PROXY
+  - DOMAIN-SUFFIX,twitter.com,PROXY
+  - DOMAIN-SUFFIX,facebook.com,PROXY
+  - DOMAIN-SUFFIX,instagram.com,PROXY
+
+  # Default proxy
+  - MATCH,PROXY
