@@ -439,11 +439,69 @@ def web_open(ctx):
 
 @cli.command()
 @click.argument('env_file', type=click.Path(exists=True))
+@click.option('--output', '-o', help='Output path for config.yaml')
+@click.option('--subscriptions', '-s', help='Output path for subscriptions.json')
+@click.option('--dry-run', is_flag=True, help='Show what would be migrated without writing files')
 @click.pass_context
-def migrate(ctx, env_file):
+def migrate(ctx, env_file, output, subscriptions, dry_run):
     """Migrate old .env configuration to new format."""
-    print_info("Config migration not yet implemented")
-    print_info("This will be implemented in Phase 1")
+    from migrate import migrate_env_to_yaml, MigrationError
+    from pathlib import Path
+
+    try:
+        # Determine output paths
+        project_root = Path(__file__).parent.parent
+
+        if not output:
+            output = project_root / "config" / "config.yaml"
+
+        if not subscriptions:
+            # Derive from config or use default
+            install_root = "/opt/lab-remote-stack"
+            subscriptions = f"{install_root}/clash/subscriptions.json"
+
+        # Run migration
+        print_info(f"Migrating configuration from: {env_file}")
+        if dry_run:
+            print_info("DRY RUN MODE - No files will be written")
+
+        config_data, subscriptions_data, report = migrate_env_to_yaml(
+            env_file,
+            config_output=str(output) if not dry_run else None,
+            subscriptions_output=subscriptions if not dry_run else None,
+            dry_run=dry_run
+        )
+
+        # Display report
+        click.echo("\n" + report)
+
+        if not dry_run:
+            print_success(f"\nMigration completed successfully!")
+            print_info(f"  Config written to: {output}")
+
+            if subscriptions_data:
+                print_info(f"  Subscriptions written to: {subscriptions}")
+                print_info(f"\nNext steps:")
+                print_info(f"  1. Review {output} and customize as needed")
+                print_info(f"  2. Run 'lab-remote-ctl subscription update Default' to download subscription")
+                print_info(f"  3. Run 'lab-remote-ctl deploy' to deploy")
+            else:
+                print_info(f"\nNext steps:")
+                print_info(f"  1. Review {output} and customize as needed")
+                print_info(f"  2. Add a subscription with 'lab-remote-ctl subscription add <name> <url>'")
+                print_info(f"  3. Run 'lab-remote-ctl deploy' to deploy")
+        else:
+            print_info("\nDry run completed. Use without --dry-run to write files.")
+
+    except MigrationError as e:
+        print_error(f"Migration failed: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Unexpected error during migration: {e}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == '__main__':
