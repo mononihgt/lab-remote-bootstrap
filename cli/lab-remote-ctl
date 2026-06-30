@@ -171,9 +171,33 @@ def deploy(ctx, dry_run, skip_clash, skip_autossh, skip_zsh, skip_web):
         print_info("Run 'lab-remote-ctl init' to create a configuration file")
         sys.exit(1)
 
-    print_info("Deployment not yet implemented")
-    print_info("This will be implemented in Phase 2")
-    sys.exit(1)
+    from deployer import deploy as run_deploy
+
+    verbose = ctx.obj.get('verbose', False)
+
+    try:
+        success = run_deploy(
+            config,
+            skip_clash=skip_clash,
+            skip_autossh=skip_autossh,
+            skip_zsh=skip_zsh,
+            skip_web=skip_web,
+            dry_run=dry_run,
+            verbose=verbose
+        )
+
+        if not success:
+            sys.exit(1)
+
+    except KeyboardInterrupt:
+        print_error("\nDeployment interrupted")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Deployment failed: {e}")
+        if verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 
 @cli.group()
