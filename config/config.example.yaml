@@ -5,6 +5,8 @@
 deployment:
   mode: host  # 'host' or 'docker'
   target: remote  # 'remote' (deploy via SSH) or 'local' (deploy on current machine)
+  # Optional local SSH key for remote deployment. Leave empty to use ~/.ssh/config or ssh-agent.
+  ssh_identity_file: ""
 
 # Cloud server configuration (for reverse SSH tunnel)
 cloud:
@@ -29,6 +31,7 @@ clash:
 
 # AutoSSH reverse tunnel configuration
 autossh:
+  # Server-side key on the lab machine, used by AutoSSH to connect to the cloud server.
   identity_file: ~/.ssh/id_ed25519_autossh
   monitor_port: 20000
 

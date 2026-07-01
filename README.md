@@ -38,6 +38,7 @@
 
 - Python 3.7+ 已安装
 - 可以通过 SSH 连接到云服务器和实验室服务器
+- 远程部署时，`deployment.ssh_identity_file` 是**本地机器上**用于连接实验室服务器的私钥；如果留空，则使用 `~/.ssh/config` 或 ssh-agent
 
 #### 2. 云服务器（用于反向 SSH 隧道）
 
@@ -79,7 +80,10 @@ ssh-copy-id -i ~/.ssh/id_ed25519_autossh.pub <cloud_user>@<cloud_host>
 ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 ```
 
-**重要**：在配置 `config.yaml` 时，`autossh.identity_file` 应该填写实验室服务器上的私钥路径（如 `~/.ssh/id_ed25519_autossh`），而不是本地路径。
+**重要**：这里有两个不同的 SSH 身份，不要混用：
+
+- `deployment.ssh_identity_file`：本地机器 → 实验室服务器，用于 `lab-remote-ctl` 远程部署。可留空以使用 `~/.ssh/config` 或 ssh-agent。
+- `autossh.identity_file`：实验室服务器 → 云服务器，用于 AutoSSH 反向隧道。这里填写实验室服务器上的私钥路径，如 `~/.ssh/id_ed25519_autossh`。
 
 #### 4. 网络连通性
 
@@ -119,6 +123,7 @@ pip3 install -r requirements.txt
 **关键配置**：
 - `deployment.target` 设置为 `local`（本地部署模式）
 - 云服务器信息要正确填写（用于 AutoSSH 反向隧道）
+- `deployment.ssh_identity_file` 留空（本地部署不需要控制 SSH 私钥）
 - `autossh.identity_file` 填写服务器上的 SSH 私钥路径
 
 #### 3. 在服务器上执行部署
@@ -161,6 +166,19 @@ vim config/config.yaml
 #### 3. 部署到远程服务器
 
 **注意**：`lab-remote-ctl` 在本地运行，通过 SSH 控制远程服务器。
+
+远程部署时的 SSH 配置示例：
+
+```yaml
+deployment:
+  target: remote
+  # 本地私钥；留空表示使用 ~/.ssh/config 或 ssh-agent
+  ssh_identity_file: ""
+
+autossh:
+  # 实验室服务器上的私钥路径，用于 AutoSSH 连接云服务器
+  identity_file: ~/.ssh/id_ed25519_autossh
+```
 
 ```bash
 # 完整部署（Clash + AutoSSH + Zsh + Web）

@@ -62,6 +62,14 @@ def init(ctx, mode, interactive):
             print_info("  - Deploying directly on this machine")
             print_info("  - No SSH connection needed")
             print_info("  - Use this for first-time setup on lab server")
+            deployment_ssh_key = ""
+        else:
+            deployment_ssh_key = click.prompt(
+                "Local SSH identity file for deployment (empty to use SSH config/agent)",
+                type=str,
+                default="",
+                show_default=False,
+            )
 
         # Cloud server
         cloud_host = click.prompt("Cloud server hostname", type=str)
@@ -83,7 +91,7 @@ def init(ctx, mode, interactive):
 
         # AutoSSH
         ssh_key = click.prompt(
-            "SSH identity file for AutoSSH",
+            "Server-side SSH identity file for AutoSSH",
             type=str,
             default="~/.ssh/id_ed25519_autossh"
         )
@@ -95,6 +103,7 @@ def init(ctx, mode, interactive):
 deployment:
   mode: {mode}
   target: {deployment_target}
+  ssh_identity_file: {deployment_ssh_key}
 
 cloud:
   host: {cloud_host}
@@ -440,7 +449,7 @@ def web_start(ctx):
 
     host = config.get('cloud.host')
     user = config.get('cloud.user')
-    identity_file = config.get('autossh.identity_file')
+    identity_file = config.get('deployment.ssh_identity_file')
     reverse_port = config.get('cloud.reverse_port', 2223)
 
     from utils import run_ssh_command
@@ -469,7 +478,7 @@ def web_stop(ctx):
 
     host = config.get('cloud.host')
     user = config.get('cloud.user')
-    identity_file = config.get('autossh.identity_file')
+    identity_file = config.get('deployment.ssh_identity_file')
     reverse_port = config.get('cloud.reverse_port', 2223)
 
     from utils import run_ssh_command

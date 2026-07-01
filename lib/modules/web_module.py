@@ -41,10 +41,7 @@ class WebModule(BaseModule):
 
         print_info("Deploying Web interface...")
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('autossh.identity_file')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        host, user, identity_file, reverse_port, _ = self.get_deployment_params()
         install_root = self.config.get('clash.install_root', '/opt/lab-remote-stack')
 
         # Create web directory
@@ -74,10 +71,7 @@ class WebModule(BaseModule):
         """Rollback Web deployment."""
         print_info("Rolling back Web deployment...")
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('autossh.identity_file')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        host, user, identity_file, reverse_port, _ = self.get_deployment_params()
 
         # Stop service
         cmd = "sudo systemctl stop lab-web.service 2>/dev/null || true"

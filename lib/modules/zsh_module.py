@@ -29,10 +29,7 @@ class ZshModule(BaseModule):
         """Deploy Zsh configuration."""
         print_info("Deploying Zsh configuration...")
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('autossh.identity_file')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        host, user, identity_file, reverse_port, _ = self.get_deployment_params()
 
         # Install tools
         if not self._install_tools(host, user, identity_file, reverse_port):

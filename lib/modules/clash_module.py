@@ -51,10 +51,7 @@ class ClashModule(BaseModule):
         """Deploy Clash proxy."""
         print_info("Deploying Clash proxy...")
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('autossh.identity_file')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        host, user, identity_file, reverse_port, _ = self.get_deployment_params()
         install_root = self.config.get('clash.install_root', '/opt/lab-remote-stack')
 
         # Create directories
@@ -88,10 +85,7 @@ class ClashModule(BaseModule):
         """Rollback Clash deployment."""
         print_info("Rolling back Clash deployment...")
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('autossh.identity_file')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        host, user, identity_file, reverse_port, _ = self.get_deployment_params()
 
         # Stop service
         cmd = "sudo systemctl stop lab-clash.service 2>/dev/null || true"

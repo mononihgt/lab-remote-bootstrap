@@ -84,8 +84,7 @@ class BaseModule(ABC):
             return (
                 self.config.get('cloud.host'),
                 self.config.get('cloud.user'),
-                self.config.get('autossh.identity_file'),
+                self.config.get('deployment.ssh_identity_file'),
                 self.config.get('cloud.reverse_port', 2223),
                 False
             )
-

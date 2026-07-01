@@ -18,6 +18,10 @@
           "enum": ["local", "remote"],
           "default": "remote",
           "description": "Deployment target: local (on current machine) or remote (via SSH)"
+        },
+        "ssh_identity_file": {
+          "type": "string",
+          "description": "Optional local SSH private key used to control the deployment target. Leave empty to use SSH config or agent."
         }
       }
     },

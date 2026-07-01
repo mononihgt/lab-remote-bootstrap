@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from modules import BaseModule
 from utils import (
     print_error, print_info, print_success, print_warning,
-    run_ssh_command, upload_file
+    run_ssh_command
 )
 
 
@@ -18,7 +18,6 @@ class AutoSSHModule(BaseModule):
 
     def validate(self) -> bool:
         """Validate AutoSSH module prerequisites."""
-        # Check if remote server is accessible
         host = self.config.get('cloud.host')
         user = self.config.get('cloud.user')
 
@@ -26,14 +25,18 @@ class AutoSSHModule(BaseModule):
             print_error("Cloud host and user must be configured")
             return False
 
-        # Check if SSH identity file exists
-        identity_file = self.config.get('autossh.identity_file')
-        if identity_file:
-            identity_path = Path(identity_file).expanduser()
-            if not identity_path.exists():
-                print_error(f"SSH identity file not found: {identity_file}")
-                print_info("Generate one with: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_autossh")
+        control_identity_file = self.config.get('deployment.ssh_identity_file')
+        if control_identity_file:
+            control_identity_path = Path(control_identity_file).expanduser()
+            if not control_identity_path.exists():
+                print_error(f"Deployment SSH identity file not found: {control_identity_file}")
+                print_info("Set deployment.ssh_identity_file to a local key, or omit it to use SSH config/agent")
                 return False
+
+        autossh_identity_file = self.config.get('autossh.identity_file')
+        if not autossh_identity_file:
+            print_error("AutoSSH identity file must be configured")
+            return False
 
         return True
 
@@ -41,26 +44,37 @@ class AutoSSHModule(BaseModule):
         """Deploy AutoSSH reverse tunnel."""
         print_info("Deploying AutoSSH reverse tunnel...")
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('autossh.identity_file')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        host, user, control_identity_file, reverse_port, _ = self.get_deployment_params()
+        autossh_identity_file = self.config.get('autossh.identity_file')
         monitor_port = self.config.get('autossh.monitor_port', 20000)
 
         # Install autossh
-        if not self._install_autossh(host, user, identity_file, reverse_port):
+        if not self._install_autossh(host, user, control_identity_file, reverse_port):
             return False
 
         # Setup SSH key
-        if not self._setup_ssh_key(host, user, identity_file, reverse_port):
+        if not self._setup_ssh_key(
+            host,
+            user,
+            control_identity_file,
+            reverse_port,
+            autossh_identity_file,
+        ):
             return False
 
         # Create systemd service
-        if not self._create_systemd_service(host, user, identity_file, reverse_port, monitor_port):
+        if not self._create_systemd_service(
+            host,
+            user,
+            control_identity_file,
+            reverse_port,
+            monitor_port,
+            autossh_identity_file,
+        ):
             return False
 
         # Start service
-        if not self._start_service(host, user, identity_file, reverse_port):
+        if not self._start_service(host, user, control_identity_file, reverse_port):
             return False
 
         print_success("AutoSSH reverse tunnel deployed successfully")
@@ -70,18 +84,15 @@ class AutoSSHModule(BaseModule):
         """Rollback AutoSSH deployment."""
         print_info("Rolling back AutoSSH deployment...")
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('autossh.identity_file')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        host, user, control_identity_file, reverse_port, _ = self.get_deployment_params()
 
         # Stop service
         cmd = "sudo systemctl stop lab-autossh.service 2>/dev/null || true"
-        run_ssh_command(host, user, cmd, identity_file, reverse_port)
+        run_ssh_command(host, user, cmd, control_identity_file, reverse_port)
 
         # Disable service
         cmd = "sudo systemctl disable lab-autossh.service 2>/dev/null || true"
-        run_ssh_command(host, user, cmd, identity_file, reverse_port)
+        run_ssh_command(host, user, cmd, control_identity_file, reverse_port)
 
         print_success("AutoSSH deployment rolled back")
         return True
@@ -117,7 +128,14 @@ fi
         print_success("autossh installed")
         return True
 
-    def _setup_ssh_key(self, host: str, user: str, identity_file: str, port: int) -> bool:
+    def _setup_ssh_key(
+        self,
+        host: str,
+        user: str,
+        control_identity_file: str,
+        port: int,
+        autossh_identity_file: str,
+    ) -> bool:
         """Setup SSH key for AutoSSH."""
         print_info("Setting up SSH key...")
 
@@ -126,28 +144,20 @@ fi
 
         # Create .ssh directory if not exists
         cmd = f"mkdir -p $HOME/.ssh && chmod 700 $HOME/.ssh"
-        run_ssh_command(host, user, cmd, identity_file, port)
-
-        # Upload private key
-        local_key = Path(identity_file).expanduser()
-        remote_key_path = f"/home/{user}/.ssh/id_autossh"
-
-        if not upload_file(str(local_key), remote_key_path, host, user, identity_file, port):
-            print_error("Failed to upload SSH private key")
-            return False
+        run_ssh_command(host, user, cmd, control_identity_file, port)
 
         # Set permissions
-        cmd = f"chmod 600 $HOME/.ssh/id_autossh"
-        run_ssh_command(host, user, cmd, identity_file, port)
+        cmd = f"chmod 600 {autossh_identity_file}"
+        run_ssh_command(host, user, cmd, control_identity_file, port)
 
         # Add cloud host to known_hosts
         cmd = f"ssh-keyscan -H {cloud_host} >> $HOME/.ssh/known_hosts 2>/dev/null || true"
-        run_ssh_command(host, user, cmd, identity_file, port)
+        run_ssh_command(host, user, cmd, control_identity_file, port)
 
         # Test connection to cloud server
         print_info(f"Testing connection to cloud server {cloud_host}...")
-        test_cmd = f"ssh -i $HOME/.ssh/id_autossh -o ConnectTimeout=10 -o StrictHostKeyChecking=no {cloud_user}@{cloud_host} 'echo Connection successful'"
-        returncode, stdout, stderr = run_ssh_command(host, user, test_cmd, identity_file, port)
+        test_cmd = f"ssh -i {autossh_identity_file} -o ConnectTimeout=10 -o StrictHostKeyChecking=no {cloud_user}@{cloud_host} 'echo Connection successful'"
+        returncode, stdout, stderr = run_ssh_command(host, user, test_cmd, control_identity_file, port)
 
         if returncode != 0:
             print_warning("SSH connection test failed")
@@ -160,7 +170,15 @@ fi
         print_success("SSH key setup complete")
         return True
 
-    def _create_systemd_service(self, host: str, user: str, identity_file: str, port: int, monitor_port: int) -> bool:
+    def _create_systemd_service(
+        self,
+        host: str,
+        user: str,
+        control_identity_file: str,
+        port: int,
+        monitor_port: int,
+        autossh_identity_file: str,
+    ) -> bool:
         """Create systemd service for AutoSSH."""
         print_info("Creating systemd service...")
 
@@ -185,7 +203,7 @@ ExecStart=/usr/bin/autossh -M {monitor_port} -N \\
     -o "ServerAliveCountMax=3" \\
     -o "StrictHostKeyChecking=no" \\
     -o "ExitOnForwardFailure=yes" \\
-    -i /home/{user}/.ssh/id_autossh \\
+    -i {autossh_identity_file} \\
     -R {reverse_port}:localhost:{remote_ssh_port} \\
     {cloud_user}@{cloud_host}
 Restart=always
@@ -203,7 +221,7 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable lab-autossh.service
 """
-        returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
+        returncode, _, stderr = run_ssh_command(host, user, cmd, control_identity_file, port)
         if returncode != 0:
             print_error(f"Failed to create service: {stderr}")
             return False
