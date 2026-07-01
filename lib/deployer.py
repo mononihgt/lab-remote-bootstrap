@@ -81,6 +81,8 @@ class Deployer:
 
         # Phase 2: Deploy modules
         deployed_modules = []
+        skipped_modules = []
+        failed_modules = []
 
         try:
             # Deploy Clash
@@ -91,6 +93,8 @@ class Deployer:
                     print_error("Clash deployment failed")
                     self._rollback_modules(deployed_modules)
                     return False
+            else:
+                skipped_modules.append('clash')
 
             # Deploy AutoSSH
             if not skip_autossh:
@@ -100,24 +104,32 @@ class Deployer:
                     print_error("AutoSSH deployment failed")
                     self._rollback_modules(deployed_modules)
                     return False
+            else:
+                skipped_modules.append('autossh')
 
             # Deploy Zsh
             if not skip_zsh:
                 if self._deploy_module('zsh', ZshModule):
                     deployed_modules.append('zsh')
                 else:
+                    failed_modules.append('zsh')
                     print_error("Zsh deployment failed")
                     # Zsh failure is not critical, continue
                     print_warning("Continuing despite Zsh deployment failure")
+            else:
+                skipped_modules.append('zsh')
 
             # Deploy Web
             if not skip_web:
                 if self._deploy_module('web', WebModule):
                     deployed_modules.append('web')
                 else:
+                    failed_modules.append('web')
                     print_error("Web interface deployment failed")
                     # Web failure is not critical, continue
                     print_warning("Continuing despite Web deployment failure")
+            else:
+                skipped_modules.append('web')
 
             # Phase 3: Verification
             print_info("\n[7/7] Deployment verification")
@@ -136,7 +148,7 @@ class Deployer:
             else:
                 print_warning(f"⚠️  Deployment completed with {results['summary']['failed']} health check failures\n")
 
-            self._print_next_steps()
+            self._print_next_steps(deployed_modules, skipped_modules, failed_modules)
 
             return True
 
@@ -323,21 +335,69 @@ class Deployer:
         print_success("Dry run complete")
         return True
 
-    def _print_next_steps(self):
-        """Print next steps after deployment."""
+    def _print_next_steps(self, deployed_modules=None, skipped_modules=None, failed_modules=None):
+        """Print next steps based on this deployment run."""
+        deployed_modules = deployed_modules or []
+        skipped_modules = skipped_modules or []
+        failed_modules = failed_modules or []
+
         reverse_port = self.config.get('cloud.reverse_port', 2223)
         cloud_host = self.config.get('cloud.host')
-        cloud_user = self.config.get('cloud.user')
+        lab_user = self.config.get('target.user', self.config.get('cloud.user'))
+        target_host = self.config.get('target.host', cloud_host)
+        target_port = self.config.get('target.ssh_port', reverse_port)
+        target_identity_file = self.config.get(
+            'target.ssh_identity_file',
+            self.config.get('deployment.ssh_identity_file')
+        )
+        clash_port = self.config.get('clash.mixed_port', 7890)
+        clash_controller = self.config.get('clash.external_controller', '127.0.0.1:9090')
+        clash_api_port = self.config.get('clash.api_port', 9090)
+        web_port = self.config.get('web.port', 5000)
+        local_web_port = self.config.get('web.local_port', 5001)
 
         print_info("Next steps:")
-        print_info(f"  1. Connect to server via reverse tunnel:")
-        print_info(f"     ssh -p {reverse_port} {cloud_user}@{cloud_host}\n")
-        print_info(f"  2. Add a Clash subscription:")
-        print_info(f"     lab-remote-ctl subscription add \"Name\" https://...\n")
-        print_info(f"  3. Update the subscription:")
-        print_info(f"     lab-remote-ctl subscription update \"Name\"\n")
-        print_info(f"  4. Check system health:")
-        print_info(f"     lab-remote-ctl health\n")
+        step = 1
+
+        if failed_modules:
+            print_info(f"  {step}. Review failed non-critical modules: {', '.join(failed_modules)}")
+            print_info("     Re-run deploy for those modules after fixing the errors.\n")
+            step += 1
+
+        if 'autossh' in deployed_modules:
+            print_info(f"  {step}. Connect to server via reverse tunnel:")
+            print_info(f"     ssh -p {reverse_port} {lab_user}@{cloud_host}\n")
+            step += 1
+
+        if 'clash' in deployed_modules:
+            print_info(f"  {step}. Add or update a Clash subscription:")
+            print_info("     lab-remote-ctl subscription add \"Name\" https://...")
+            print_info("     lab-remote-ctl subscription update \"Name\"")
+            print_info(f"     Clash local proxy: 127.0.0.1:{clash_port}")
+            print_info(f"     Clash controller: http://{clash_controller}\n")
+            step += 1
+
+        if 'web' in deployed_modules:
+            identity_arg = f" -i {target_identity_file}" if target_identity_file else ""
+            print_info(f"  {step}. Open the Web management UI through a local SSH tunnel:")
+            print_info(
+                f"     ssh -N -L {local_web_port}:127.0.0.1:{web_port} "
+                f"-L {clash_api_port}:127.0.0.1:{clash_api_port}"
+                f"{identity_arg} -p {target_port} {lab_user}@{target_host}"
+            )
+            print_info(f"     Web management UI: http://localhost:{local_web_port}\n")
+            step += 1
+
+        if 'zsh' in deployed_modules:
+            print_info(f"  {step}. Start a new shell session to load the Zsh configuration:")
+            print_info("     exec zsh -l\n")
+            step += 1
+
+        print_info(f"  {step}. Check system health:")
+        print_info("     lab-remote-ctl health\n")
+
+        if skipped_modules:
+            print_info(f"Skipped this run: {', '.join(skipped_modules)}")
 
 
 def deploy(

@@ -93,7 +93,9 @@ sudo mkdir -p {install_root}/web
 sudo mkdir -p {install_root}/web/templates
 sudo mkdir -p {install_root}/web/static/css
 sudo mkdir -p {install_root}/web/static/js
+sudo mkdir -p {install_root}/lib
 sudo chown -R {user}:{user} {install_root}/web
+sudo chown -R {user}:{user} {install_root}/lib
 """
         returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
         if returncode != 0:
@@ -117,6 +119,9 @@ sudo chown -R {user}:{user} {install_root}/web
                 print_error("Failed to upload app.py")
                 return False
             self.log("Uploaded app.py")
+
+        if not self._upload_runtime_lib(host, user, identity_file, port, install_root):
+            return False
 
         # Upload templates
         templates_dir = web_dir / "templates"
@@ -152,6 +157,26 @@ sudo chown -R {user}:{user} {install_root}/web
                         self.log(f"Uploaded {js_file.name}")
 
         print_success("Web application uploaded")
+        return True
+
+    def _upload_runtime_lib(self, host: str, user: str, identity_file: str, port: int, install_root: str) -> bool:
+        """Upload local Python modules required by the Web app."""
+        project_root = get_project_root()
+        lib_dir = project_root / "lib"
+        runtime_modules = ["config.py", "subscription.py", "health.py", "utils.py"]
+
+        for module_name in runtime_modules:
+            source_path = lib_dir / module_name
+            if not source_path.exists():
+                print_error(f"Required runtime module missing: {source_path}")
+                return False
+
+            remote_path = f"{install_root}/lib/{module_name}"
+            if not upload_file(str(source_path), remote_path, host, user, identity_file, port):
+                print_error(f"Failed to upload {module_name}")
+                return False
+            self.log(f"Uploaded {module_name}")
+
         return True
 
     def _install_dependencies(self, host: str, user: str, identity_file: str, port: int, install_root: str) -> bool:
@@ -230,13 +255,13 @@ sudo systemctl enable lab-web.service
 
         cmd = "sudo systemctl is-active lab-web.service"
         returncode, stdout, _ = run_ssh_command(host, user, cmd, identity_file, port)
-        if returncode == 0 and 'active' in stdout:
+        if returncode == 0 and stdout.strip() == 'active':
             print_success("Web service started")
             return True
         else:
-            print_warning("Web service may not be running properly")
+            print_error("Web service is not running properly")
             print_info("Check logs with: sudo journalctl -u lab-web.service -n 50")
-            return True  # Continue anyway
+            return False
 
     def restart_service(self, host: str, user: str, identity_file: str, port: int) -> bool:
         """Restart Web service."""

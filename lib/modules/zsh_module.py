@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Zsh configuration module."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -334,15 +335,15 @@ fi
         """Write config block to .zshrc."""
         print_info("Writing Zsh configuration...")
 
-        # Escape single quotes and backslashes for shell
-        escaped_config = config_block.replace("\\", "\\\\").replace("'", "'\\''")
+        config_literal = json.dumps(config_block)
 
         # Write config using Python heredoc-style script
         write_cmd = f"""
 python3 << 'PYTHON_EOF'
+import os
 import re
 
-zshrc_path = '{{}}/{{.}}zshrc'.format(__import__('os').path.expanduser('~'))
+zshrc_path = os.path.join(os.path.expanduser('~'), '.zshrc')
 start_marker = '# >>> lab-remote-bootstrap >>>'
 end_marker = '# <<< lab-remote-bootstrap <<<'
 
@@ -360,12 +361,11 @@ pattern = re.compile(
 content = pattern.sub('', content).strip()
 
 # Append new block
-new_block = '''
-{escaped_config}
-'''
+new_block = {config_literal}
 
+separator = '\\n' if content else ''
 with open(zshrc_path, 'w') as f:
-    f.write(content + new_block)
+    f.write(content + separator + new_block)
 
 print('Configuration written to', zshrc_path)
 PYTHON_EOF

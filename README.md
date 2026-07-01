@@ -187,6 +187,8 @@ cloud:
   host: <cloud_public_host>
   user: <cloud_user>
   reverse_port: 2222
+  # 反向 SSH 在云服务器上的监听地址；需要公网直连时用 0.0.0.0
+  reverse_bind_address: 0.0.0.0
 
 autossh:
   # 实验室服务器上的私钥路径，用于 AutoSSH 连接云服务器
@@ -207,6 +209,10 @@ autossh:
 # 从任何地方通过云服务器连接实验室服务器
 ssh -p 2223 <lab_user>@<cloud_host>
 ```
+
+重新部署 AutoSSH 时，`lab-remote-ctl deploy` 会先通过实验室服务器登录云服务器，清理同一 `cloud.reverse_port` 上的旧监听进程，再重启 `lab-autossh.service`。这可以恢复旧反向隧道半死时出现的 `Connection timed out during banner exchange`。
+
+`deploy` 结束时会根据本次实际结果输出对应的 Next steps：成功部署的模块会显示后续操作，跳过的模块不会显示对应步骤，Zsh/Web 等非关键模块失败时会优先提示修复并重新部署。
 
 #### 4. 管理订阅
 
@@ -246,6 +252,14 @@ ssh -p 2223 <lab_user>@<cloud_host>
 # 停止 Web 服务
 ./cli/lab-remote-ctl web stop
 ```
+
+远程部署时，Web 服务默认只监听实验室服务器本机的 `127.0.0.1:5000`，Clash 控制端口默认只监听实验室服务器本机的 `127.0.0.1:9090`。在本地 PC 访问前先建立 SSH 隧道：
+
+```bash
+ssh -N -L 5001:127.0.0.1:5000 -L 9090:127.0.0.1:9090 sr665-4
+```
+
+`lab-remote-ctl web start` 和 `lab-remote-ctl web open` 在远程部署模式下会自动启动该本地隧道，然后打开 `http://localhost:5001`。`lab-remote-ctl web stop` 会停止远端 Web 服务，并清理本地隧道。不要直接访问本地 `http://localhost:5000`；macOS 可能已由 AirPlay/Control Center 占用该端口。
 
 ### 方式 3：从旧版本迁移
 
@@ -322,7 +336,7 @@ lab-remote-ctl
 
 **访问方式**：
 - SSH 连接实验室服务器：`ssh -p 2223 <user>@<cloud_host>`
-- Web 管理界面：`http://localhost:5000`（在实验室服务器上运行）
+- Web 管理界面：远程部署时先建立 SSH 隧道，再访问 `http://localhost:5001`
 - Clash 代理：HTTP `7890`，SOCKS `7891`
 
 ---

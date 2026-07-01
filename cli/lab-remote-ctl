@@ -7,8 +7,12 @@ A command-line tool for managing lab remote development environments.
 
 import sys
 import json
+import socket
+import subprocess
 from pathlib import Path
 from datetime import datetime
+from dataclasses import dataclass
+from typing import List, Optional
 
 # Add lib directory to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
@@ -16,6 +20,149 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 import click
 from config import Config, ConfigError, load_config
 from utils import print_error, print_success, print_info
+
+
+@dataclass
+class SubscriptionPaths:
+    subscriptions_file: Path
+    config_file: Path
+
+
+@dataclass
+class WebAccess:
+    url: str
+    tunnel_command: Optional[str] = None
+    tunnel_args: Optional[List[str]] = None
+    local_web_port: Optional[int] = None
+
+
+def resolve_subscription_paths(config) -> SubscriptionPaths:
+    """Resolve subscription storage paths for local or remote deployments."""
+    if config.is_remote_deployment:
+        project_root = Path(__file__).parent.parent
+        return SubscriptionPaths(
+            subscriptions_file=project_root / "config" / "subscriptions.json",
+            config_file=project_root / "config" / "clash.generated.yaml",
+        )
+
+    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
+    return SubscriptionPaths(
+        subscriptions_file=Path(install_root) / "clash" / "subscriptions.json",
+        config_file=Path(install_root) / "clash" / "config.yaml",
+    )
+
+
+def resolve_web_access(config) -> WebAccess:
+    """Resolve how the operator should access the Web UI."""
+    web_port = config.get('web.port', 5000)
+
+    if not config.is_remote_deployment:
+        return WebAccess(url=f"http://localhost:{web_port}")
+
+    local_web_port = config.get('web.local_port', 5001)
+    clash_api_port = config.get('clash.api_port', 9090)
+    host = config.get('target.host', config.get('cloud.host'))
+    user = config.get('target.user', config.get('cloud.user'))
+    ssh_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
+    identity_file = config.get(
+        'target.ssh_identity_file',
+        config.get('deployment.ssh_identity_file')
+    )
+
+    destination = f"{user}@{host}"
+    display_args = [
+        "ssh",
+        "-N",
+        "-L",
+        f"{local_web_port}:127.0.0.1:{web_port}",
+        "-L",
+        f"{clash_api_port}:127.0.0.1:{clash_api_port}",
+    ]
+    if identity_file:
+        display_args.extend(["-i", identity_file])
+    display_args.extend(["-p", str(ssh_port), destination])
+
+    tunnel_args = [
+        "ssh",
+        "-fN",
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-L",
+        f"{local_web_port}:127.0.0.1:{web_port}",
+        "-L",
+        f"{clash_api_port}:127.0.0.1:{clash_api_port}",
+    ]
+    if identity_file:
+        tunnel_args.extend(["-i", identity_file])
+    tunnel_args.extend(["-p", str(ssh_port), destination])
+
+    return WebAccess(
+        url=f"http://localhost:{local_web_port}",
+        tunnel_command=tunnel_args_to_display(display_args),
+        tunnel_args=tunnel_args,
+        local_web_port=local_web_port,
+    )
+
+
+def tunnel_args_to_display(args: List[str]) -> str:
+    """Render tunnel args as a shell-friendly display string."""
+    return " ".join(args)
+
+
+def is_local_port_listening(port: int) -> bool:
+    """Return True when localhost accepts TCP connections on port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.2)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def ensure_web_tunnel(access: WebAccess) -> bool:
+    """Start the local SSH tunnel for remote Web access when needed."""
+    if not access.tunnel_args or not access.local_web_port:
+        return True
+
+    if is_local_port_listening(access.local_web_port):
+        return True
+
+    result = subprocess.run(
+        access.tunnel_args,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "").strip()
+        print_error("Failed to start local Web tunnel")
+        if details:
+            print_info(details)
+        return False
+
+    return True
+
+
+def stop_web_tunnel(access: WebAccess) -> bool:
+    """Stop the local SSH tunnel used for remote Web access."""
+    if not access.tunnel_args or not access.local_web_port:
+        return True
+
+    command = (
+        f"pids=$(lsof -tiTCP:{access.local_web_port} -sTCP:LISTEN 2>/dev/null); "
+        'if [ -n "$pids" ]; then kill $pids; fi'
+    )
+    result = subprocess.run(
+        ["sh", "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "").strip()
+        print_error("Failed to stop local Web tunnel")
+        if details:
+            print_info(details)
+        return False
+
+    return True
 
 
 def build_config_content(
@@ -55,6 +202,7 @@ cloud:
   host: {cloud_host}
   user: {cloud_user}
   reverse_port: {reverse_port}
+  reverse_bind_address: 0.0.0.0
 
 clash:
   install_root: /opt/lab-remote-stack
@@ -91,6 +239,7 @@ zsh:
 web:
   enabled: true
   port: 5000
+  local_port: 5001
   bind: 127.0.0.1
 """
 
@@ -333,13 +482,11 @@ def subscription_add(ctx, name, url, template):
         sys.exit(1)
 
     from subscription import Subscription
-    from utils import get_project_root
 
-    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
-    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+    paths = resolve_subscription_paths(config)
 
     try:
-        sub_manager = Subscription(subscriptions_file)
+        sub_manager = Subscription(str(paths.subscriptions_file))
         sub = sub_manager.add(name, url, template)
         print_success(f"Added subscription: {name}")
         print_info(f"  URL: {url}")
@@ -362,11 +509,10 @@ def subscription_list(ctx):
 
     from subscription import Subscription
 
-    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
-    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+    paths = resolve_subscription_paths(config)
 
     try:
-        sub_manager = Subscription(subscriptions_file)
+        sub_manager = Subscription(str(paths.subscriptions_file))
         subs = sub_manager.list()
 
         if not subs:
@@ -408,11 +554,10 @@ def subscription_activate(ctx, name):
 
     from subscription import Subscription
 
-    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
-    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+    paths = resolve_subscription_paths(config)
 
     try:
-        sub_manager = Subscription(subscriptions_file)
+        sub_manager = Subscription(str(paths.subscriptions_file))
         sub_manager.activate(name)
         print_success(f"Activated subscription: {name}")
         print_info("Restart Clash service to apply changes")
@@ -435,23 +580,21 @@ def subscription_update(ctx, name):
     from subscription import Subscription
     from utils import get_project_root
 
-    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
-    subscriptions_file = f"{install_root}/clash/subscriptions.json"
-    config_file = f"{install_root}/clash/config.yaml"
+    paths = resolve_subscription_paths(config)
 
     project_root = get_project_root()
     template_dir = str(project_root / "assets" / "clash" / "templates")
 
     try:
-        sub_manager = Subscription(subscriptions_file)
+        sub_manager = Subscription(str(paths.subscriptions_file))
         print_info(f"Updating subscription: {name}")
 
-        sub_type, node_count = sub_manager.update(name, template_dir, config_file)
+        sub_type, node_count = sub_manager.update(name, template_dir, str(paths.config_file))
 
         print_success(f"Subscription updated: {name}")
         print_info(f"  Type: {sub_type}")
         print_info(f"  Nodes: {node_count}")
-        print_info(f"  Config: {config_file}")
+        print_info(f"  Config: {paths.config_file}")
         print_info("\nRestart Clash service to apply changes")
 
     except Exception as e:
@@ -472,15 +615,14 @@ def subscription_remove(ctx, name):
 
     from subscription import Subscription
 
-    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
-    subscriptions_file = f"{install_root}/clash/subscriptions.json"
+    paths = resolve_subscription_paths(config)
 
     if not click.confirm(f"Remove subscription '{name}'?"):
         print_info("Cancelled")
         return
 
     try:
-        sub_manager = Subscription(subscriptions_file)
+        sub_manager = Subscription(str(paths.subscriptions_file))
         sub_manager.remove(name)
         print_success(f"Removed subscription: {name}")
     except Exception as e:
@@ -536,23 +678,32 @@ def web_start(ctx):
         print_error(f"Configuration error: {e}")
         sys.exit(1)
 
-    host = config.get('target.host', config.get('cloud.host'))
-    user = config.get('target.user', config.get('cloud.user'))
-    identity_file = config.get(
-        'target.ssh_identity_file',
-        config.get('deployment.ssh_identity_file')
-    )
-    reverse_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
-
-    from utils import run_ssh_command
-
     cmd = "sudo systemctl start lab-web.service"
-    returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
+    if config.is_remote_deployment:
+        host = config.get('target.host', config.get('cloud.host'))
+        user = config.get('target.user', config.get('cloud.user'))
+        identity_file = config.get(
+            'target.ssh_identity_file',
+            config.get('deployment.ssh_identity_file')
+        )
+        reverse_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
+
+        from utils import run_ssh_command
+
+        returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
+    else:
+        result = subprocess.run(cmd.split(), check=False, capture_output=True, text=True)
+        returncode, stderr = result.returncode, result.stderr
 
     if returncode == 0:
         print_success("Web service started")
-        web_port = config.get('web.port', 5000)
-        print_info(f"Access at: http://localhost:{web_port}")
+        access = resolve_web_access(config)
+        if access.tunnel_command:
+            if not ensure_web_tunnel(access):
+                sys.exit(1)
+            print_info(f"Local tunnel active: {access.url}")
+        else:
+            print_info(f"Access at: {access.url}")
     else:
         print_error(f"Failed to start web service: {stderr}")
         sys.exit(1)
@@ -568,20 +719,27 @@ def web_stop(ctx):
         print_error(f"Configuration error: {e}")
         sys.exit(1)
 
-    host = config.get('target.host', config.get('cloud.host'))
-    user = config.get('target.user', config.get('cloud.user'))
-    identity_file = config.get(
-        'target.ssh_identity_file',
-        config.get('deployment.ssh_identity_file')
-    )
-    reverse_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
-
-    from utils import run_ssh_command
-
     cmd = "sudo systemctl stop lab-web.service"
-    returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
+    if config.is_remote_deployment:
+        host = config.get('target.host', config.get('cloud.host'))
+        user = config.get('target.user', config.get('cloud.user'))
+        identity_file = config.get(
+            'target.ssh_identity_file',
+            config.get('deployment.ssh_identity_file')
+        )
+        reverse_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
+
+        from utils import run_ssh_command
+
+        returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
+    else:
+        result = subprocess.run(cmd.split(), check=False, capture_output=True, text=True)
+        returncode, stderr = result.returncode, result.stderr
 
     if returncode == 0:
+        access = resolve_web_access(config)
+        if not stop_web_tunnel(access):
+            sys.exit(1)
         print_success("Web service stopped")
     else:
         print_error(f"Failed to stop web service: {stderr}")
@@ -598,13 +756,16 @@ def web_open(ctx):
         print_error(f"Configuration error: {e}")
         sys.exit(1)
 
-    web_port = config.get('web.port', 5000)
-    web_url = f"http://localhost:{web_port}"
+    access = resolve_web_access(config)
 
-    print_info(f"Opening web interface: {web_url}")
+    if access.tunnel_command:
+        if not ensure_web_tunnel(access):
+            sys.exit(1)
+
+    print_info(f"Opening web interface: {access.url}")
 
     import webbrowser
-    webbrowser.open(web_url)
+    webbrowser.open(access.url)
 
 
 @cli.command()

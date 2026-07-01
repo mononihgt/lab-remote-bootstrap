@@ -73,6 +73,16 @@ class AutoSSHModule(BaseModule):
         ):
             return False
 
+        # Clean any stale cloud-side listener before restarting the tunnel.
+        if not self._cleanup_reverse_port(
+            host,
+            user,
+            control_identity_file,
+            reverse_port,
+            autossh_identity_file,
+        ):
+            return False
+
         # Start service
         if not self._start_service(host, user, control_identity_file, reverse_port):
             return False
@@ -170,6 +180,51 @@ fi
         print_success("SSH key setup complete")
         return True
 
+    def _cleanup_reverse_port(
+        self,
+        host: str,
+        user: str,
+        control_identity_file: str,
+        port: int,
+        autossh_identity_file: str,
+    ) -> bool:
+        """Clear stale cloud-side listeners for the reverse SSH port."""
+        print_info("Cleaning stale reverse SSH listener...")
+
+        cloud_host = self.config.get('cloud.host')
+        cloud_user = self.config.get('cloud.user')
+        reverse_port = self.config.get('cloud.reverse_port', 2223)
+
+        cleanup_script = f"""
+set +e
+if command -v fuser >/dev/null 2>&1; then
+    fuser -k -n tcp {reverse_port} >/dev/null 2>&1 || true
+elif command -v lsof >/dev/null 2>&1; then
+    pids=$(lsof -tiTCP:{reverse_port} -sTCP:LISTEN 2>/dev/null)
+    if [ -n "$pids" ]; then
+        kill $pids >/dev/null 2>&1 || true
+    fi
+fi
+exit 0
+"""
+        cmd = (
+            f"ssh -i {autossh_identity_file} "
+            f"-o ConnectTimeout=10 "
+            f"-o StrictHostKeyChecking=no "
+            f"{cloud_user}@{cloud_host} "
+            f"'{cleanup_script}'"
+        )
+
+        returncode, _, stderr = run_ssh_command(host, user, cmd, control_identity_file, port)
+        if returncode != 0:
+            print_warning("Could not clean stale reverse SSH listener")
+            if stderr:
+                print_info(stderr.strip())
+            return False
+
+        print_success("Stale reverse SSH listener cleaned")
+        return True
+
     def _create_systemd_service(
         self,
         host: str,
@@ -185,6 +240,7 @@ fi
         cloud_host = self.config.get('cloud.host')
         cloud_user = self.config.get('cloud.user')
         reverse_port = self.config.get('cloud.reverse_port', 2223)
+        reverse_bind_address = self.config.get('cloud.reverse_bind_address', '0.0.0.0')
 
         # Get remote SSH port (usually 22)
         remote_ssh_port = 22  # Could make this configurable
@@ -204,7 +260,7 @@ ExecStart=/usr/bin/autossh -M {monitor_port} -N \\
     -o "StrictHostKeyChecking=no" \\
     -o "ExitOnForwardFailure=yes" \\
     -i {autossh_identity_file} \\
-    -R {reverse_port}:localhost:{remote_ssh_port} \\
+    -R {reverse_bind_address}:{reverse_port}:localhost:{remote_ssh_port} \\
     {cloud_user}@{cloud_host}
 Restart=always
 RestartSec=10s
@@ -233,7 +289,7 @@ sudo systemctl enable lab-autossh.service
         """Start AutoSSH service."""
         print_info("Starting AutoSSH service...")
 
-        cmd = "sudo systemctl start lab-autossh.service"
+        cmd = "sudo systemctl restart lab-autossh.service"
         returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
         if returncode != 0:
             print_error(f"Failed to start service: {stderr}")
@@ -245,13 +301,13 @@ sudo systemctl enable lab-autossh.service
 
         cmd = "sudo systemctl is-active lab-autossh.service"
         returncode, stdout, _ = run_ssh_command(host, user, cmd, identity_file, port)
-        if returncode == 0 and 'active' in stdout:
+        if returncode == 0 and stdout.strip() == 'active':
             print_success("AutoSSH service started")
             return True
         else:
-            print_warning("AutoSSH service may not be running properly")
+            print_error("AutoSSH service is not running properly")
             print_info("Check logs with: sudo journalctl -u lab-autossh.service -n 50")
-            return True  # Continue anyway
+            return False
 
     def restart_service(self, host: str, user: str, identity_file: str, port: int) -> bool:
         """Restart AutoSSH service."""

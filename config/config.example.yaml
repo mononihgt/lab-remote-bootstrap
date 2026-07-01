@@ -21,6 +21,9 @@ cloud:
   host: cloud.example.com
   user: ubuntu
   reverse_port: 2223
+  # Address to bind on the cloud server for reverse SSH.
+  # Use 0.0.0.0 for direct access from the internet, or 127.0.0.1 if you only access it from the cloud server.
+  reverse_bind_address: 0.0.0.0
 
 # Clash proxy configuration
 clash:
@@ -71,6 +74,8 @@ zsh:
 web:
   enabled: true
   port: 5000
+  # Local PC port used by lab-remote-ctl web open/start for the SSH tunnel in remote deployments.
+  local_port: 5001
   bind: 127.0.0.1
 
 # Docker mode specific settings (only used when deployment.mode = docker)

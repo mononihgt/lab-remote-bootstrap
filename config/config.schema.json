@@ -66,6 +66,11 @@
           "minimum": 1024,
           "maximum": 65535,
           "default": 2223
+        },
+        "reverse_bind_address": {
+          "type": "string",
+          "default": "0.0.0.0",
+          "description": "Address to bind on the cloud server for the reverse SSH listener. Use 0.0.0.0 for direct internet access or 127.0.0.1 for cloud-local access only."
         }
       }
     },
@@ -178,6 +183,13 @@
           "minimum": 1024,
           "maximum": 65535,
           "default": 5000
+        },
+        "local_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 5001,
+          "description": "Local PC port used for the SSH tunnel to the remote Web service."
         },
         "bind": {
           "type": "string",

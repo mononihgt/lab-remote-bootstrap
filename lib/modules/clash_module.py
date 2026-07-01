@@ -70,6 +70,10 @@ class ClashModule(BaseModule):
         if not self._upload_templates(host, user, identity_file, reverse_port, install_root):
             return False
 
+        # Upload local subscription state/config if present
+        if not self._upload_subscription_files(host, user, identity_file, reverse_port, install_root):
+            return False
+
         # Create systemd service
         if not self._create_systemd_service(host, user, identity_file, reverse_port, install_root):
             return False
@@ -235,6 +239,23 @@ curl -L -o {filename} https://github.com/Loyalsoldier/v2ray-rules-dat/releases/l
             remote_path = f"{install_root}/clash/templates/{template_file.name}"
             if not upload_file(str(template_file), remote_path, host, user, identity_file, port):
                 print_warning(f"Failed to upload {template_file.name}")
+
+        return True
+
+    def _upload_subscription_files(self, host: str, user: str, identity_file: str, port: int, install_root: str) -> bool:
+        """Upload local subscription state and generated Clash config if present."""
+        project_root = get_project_root()
+        config_dir = project_root / "config"
+        files = [
+            (config_dir / "subscriptions.json", f"{install_root}/clash/subscriptions.json"),
+            (config_dir / "clash.generated.yaml", f"{install_root}/clash/config.yaml"),
+        ]
+
+        for local_file, remote_path in files:
+            if not local_file.exists():
+                continue
+            if not upload_file(str(local_file), remote_path, host, user, identity_file, port):
+                print_warning(f"Failed to upload {local_file.name}")
 
         return True
 
