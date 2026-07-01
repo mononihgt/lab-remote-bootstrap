@@ -11,7 +11,10 @@ from modules.clash_module import ClashModule
 from modules.autossh_module import AutoSSHModule
 from modules.zsh_module import ZshModule
 from modules.web_module import WebModule
-from utils import print_error, print_info, print_success, print_warning
+from utils import (
+    print_error, print_info, print_success, print_warning,
+    run_ssh_command
+)
 
 
 class Deployer:
@@ -148,6 +151,9 @@ class Deployer:
         """Validate all modules."""
         print_info("[1/7] Pre-deployment validation")
 
+        if not self._validate_remote_sudo():
+            return False
+
         modules_to_validate = []
         if not skip_clash:
             modules_to_validate.append(('clash', ClashModule))
@@ -172,6 +178,36 @@ class Deployer:
 
         print_success("Validation passed")
         return True
+
+    def _validate_remote_sudo(self) -> bool:
+        """Validate non-interactive sudo for remote deployments."""
+        if self.config.is_local_deployment:
+            return True
+
+        host = self.config.get('cloud.host')
+        user = self.config.get('cloud.user')
+        identity_file = self.config.get('deployment.ssh_identity_file')
+        port = self.config.get('cloud.reverse_port', 2223)
+
+        returncode, _, stderr = run_ssh_command(
+            host,
+            user,
+            "sudo -n true",
+            identity_file,
+            port,
+        )
+
+        if returncode == 0:
+            return True
+
+        print_error("Remote user does not have passwordless sudo")
+        if stderr:
+            print_info(f"sudo check failed: {stderr.strip()}")
+        print_info(
+            f"Grant passwordless sudo on the target, for example: "
+            f"echo '{user} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/{user}"
+        )
+        return False
 
     def _deploy_module(self, name: str, module_class) -> bool:
         """Deploy a single module."""
