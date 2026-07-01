@@ -30,10 +30,68 @@
 
 ## 快速开始（新架构 v2.0）
 
+### 前置条件
+
+在开始部署之前，请确保满足以下条件：
+
+#### 1. 本地环境（运行 lab-remote-ctl 的机器）
+
+- Python 3.7+ 已安装
+- 可以通过 SSH 连接到云服务器和实验室服务器
+
+#### 2. 云服务器（用于反向 SSH 隧道）
+
+云服务器需要提前配置好：
+
+```bash
+# 在云服务器上执行
+bash cloud/prepare_cloud_reverse_ssh.sh 2223
+```
+
+该脚本会：
+- 启用 `AllowTcpForwarding yes`
+- 启用 `GatewayPorts clientspecified`
+- 重启 SSH 服务
+- 放行端口（如果启用了防火墙）
+
+验证云服务器可访问：
+```bash
+ssh <cloud_user>@<cloud_host>
+```
+
+#### 3. 实验室服务器（部署目标）
+
+实验室服务器需要：
+- Linux 系统（支持 Ubuntu、Debian、CentOS、Arch 等）
+- sudo 权限
+- 可以通过 SSH 从本地连接
+- **具备到云服务器的 SSH 密钥认证**（用于 AutoSSH 反向隧道）
+
+生成并配置 SSH 密钥：
+```bash
+# 在实验室服务器上生成密钥
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_autossh -N ""
+
+# 将公钥添加到云服务器
+ssh-copy-id -i ~/.ssh/id_ed25519_autossh.pub <cloud_user>@<cloud_host>
+
+# 测试连接
+ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
+```
+
+**重要**：在配置 `config.yaml` 时，`autossh.identity_file` 应该填写实验室服务器上的私钥路径（如 `~/.ssh/id_ed25519_autossh`），而不是本地路径。
+
+#### 4. 网络连通性
+
+确保以下连接畅通：
+- 本地 → 云服务器（SSH）
+- 本地 → 实验室服务器（SSH）
+- 实验室服务器 → 云服务器（SSH，用于 AutoSSH）
+
 ### 安装依赖
 
 ```bash
-# 安装 Python 依赖
+# 在本地机器上安装 Python 依赖
 pip3 install -r requirements.txt
 ```
 
@@ -58,6 +116,8 @@ vim config/config.yaml
 
 #### 3. 部署到远程服务器
 
+**注意**：`lab-remote-ctl` 在本地运行，通过 SSH 控制远程服务器。
+
 ```bash
 # 完整部署（Clash + AutoSSH + Zsh + Web）
 ./cli/lab-remote-ctl deploy
@@ -65,6 +125,12 @@ vim config/config.yaml
 # 选择性部署
 ./cli/lab-remote-ctl deploy --skip-web  # 跳过 Web 界面
 ./cli/lab-remote-ctl deploy --dry-run   # 预览部署计划
+```
+
+部署完成后，AutoSSH 会建立反向隧道，你可以通过云服务器连接到实验室服务器：
+```bash
+# 从任何地方通过云服务器连接实验室服务器
+ssh -p 2223 <lab_user>@<cloud_host>
 ```
 
 #### 4. 管理订阅
@@ -139,6 +205,11 @@ lab-remote-ctl
 └── migrate           # 配置迁移
 ```
 
+**重要说明**：
+- `lab-remote-ctl` 在**本地 PC** 运行，通过 SSH 控制远程服务器
+- 部署的服务（Clash、AutoSSH、Web）在**实验室服务器**上运行
+- 通过云服务器的反向隧道，可从任何地方访问实验室服务器
+
 ### 订阅格式支持
 
 新版本支持以下订阅格式：
@@ -147,6 +218,37 @@ lab-remote-ctl
 2. **Clash YAML 订阅**：直接提供 Clash proxies 的 YAML 格式
 
 订阅会自动转换为 Clash 配置，并根据选择的模板（minimal/balanced/full）生成规则。
+
+### 完整使用流程总结
+
+```
+┌─────────────┐
+│  本地 PC    │  1. 安装依赖: pip3 install -r requirements.txt
+│             │  2. 初始化配置: ./cli/lab-remote-ctl init --interactive
+└──────┬──────┘  3. 部署: ./cli/lab-remote-ctl deploy
+       │         4. 管理订阅: ./cli/lab-remote-ctl subscription add/update
+       │ SSH     5. Web 管理: ./cli/lab-remote-ctl web open
+       ↓
+┌──────────────────┐
+│  云服务器        │  前置准备: bash cloud/prepare_cloud_reverse_ssh.sh 2223
+│  (反向隧道中转)  │  提供反向 SSH 端口 (默认 2223)
+└──────────────────┘
+       ↑
+       │ AutoSSH 反向隧道
+       │
+┌──────────────────────────┐
+│  实验室服务器 (部署目标)  │  运行服务:
+│                          │  - Clash (代理)
+│                          │  - AutoSSH (反向隧道)
+│                          │  - Zsh (终端环境)
+│                          │  - Web (管理界面)
+└──────────────────────────┘
+```
+
+**访问方式**：
+- SSH 连接实验室服务器：`ssh -p 2223 <user>@<cloud_host>`
+- Web 管理界面：`http://localhost:5000`（在实验室服务器上运行）
+- Clash 代理：HTTP `7890`，SOCKS `7891`
 
 ---
 
