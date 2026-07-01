@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Main deployment coordinator."""
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -186,14 +187,8 @@ class Deployer:
         if self.config.is_local_deployment:
             return True
 
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('deployment.ssh_identity_file')
-        port = self.config.get('cloud.reverse_port', 2223)
-        host = self.config.get('target.host', host)
-        user = self.config.get('target.user', user)
-        identity_file = self.config.get('target.ssh_identity_file', identity_file)
-        port = self.config.get('target.ssh_port', port)
+        host, user, identity_file, port = self._get_remote_target_params()
+        self._cleanup_target_known_hosts(host, port)
 
         returncode, _, stderr = run_ssh_command(
             host,
@@ -214,6 +209,38 @@ class Deployer:
             f"echo '{user} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/{user}"
         )
         return False
+
+    def _get_remote_target_params(self):
+        """Get target SSH parameters for remote deployment."""
+        host = self.config.get('cloud.host')
+        user = self.config.get('cloud.user')
+        identity_file = self.config.get('deployment.ssh_identity_file')
+        port = self.config.get('cloud.reverse_port', 2223)
+        host = self.config.get('target.host', host)
+        user = self.config.get('target.user', user)
+        identity_file = self.config.get('target.ssh_identity_file', identity_file)
+        port = self.config.get('target.ssh_port', port)
+        return host, user, identity_file, port
+
+    def _cleanup_target_known_hosts(self, host: str, port: int):
+        """Remove stale known_hosts entries for the deployment target."""
+        entries = [host]
+        if port != 22:
+            entries.append(f"[{host}]:{port}")
+
+        for entry in entries:
+            result = subprocess.run(
+                ["ssh-keygen", "-R", entry],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode not in (0, 1):
+                details = (result.stderr or result.stdout or "").strip()
+                message = f"Could not clean known_hosts entry for {entry}"
+                if details:
+                    message = f"{message}: {details}"
+                print_warning(message)
 
     def _deploy_module(self, name: str, module_class) -> bool:
         """Deploy a single module."""

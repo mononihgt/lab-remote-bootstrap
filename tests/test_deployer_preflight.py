@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -38,10 +39,8 @@ class FakeConfig:
 
 
 class DeployerPreflightTests(unittest.TestCase):
-    def test_remote_validation_fails_when_passwordless_sudo_is_unavailable(self):
-        from deployer import Deployer
-
-        config = FakeConfig(
+    def make_remote_config(self):
+        return FakeConfig(
             {
                 "deployment": {
                     "mode": "host",
@@ -62,9 +61,14 @@ class DeployerPreflightTests(unittest.TestCase):
                 "autossh": {"identity_file": "~/.ssh/id_ed25519_autossh"},
             }
         )
-        deployer = Deployer(config)
 
-        with patch("deployer.run_ssh_command") as run_ssh_command:
+    def test_remote_validation_fails_when_passwordless_sudo_is_unavailable(self):
+        from deployer import Deployer
+
+        deployer = Deployer(self.make_remote_config())
+
+        with patch("deployer.subprocess.run") as run, patch("deployer.run_ssh_command") as run_ssh_command:
+            run.return_value = subprocess.CompletedProcess([], 0, "", "")
             run_ssh_command.return_value = (1, "", "sudo: a password is required")
 
             self.assertFalse(
@@ -83,6 +87,49 @@ class DeployerPreflightTests(unittest.TestCase):
             "~/.ssh/id_target",
             2222,
         )
+
+    def test_remote_validation_cleans_target_known_hosts_before_sudo(self):
+        from deployer import Deployer
+
+        deployer = Deployer(self.make_remote_config())
+
+        with patch("deployer.subprocess.run") as run, patch("deployer.run_ssh_command") as run_ssh_command:
+            run.return_value = subprocess.CompletedProcess([], 0, "", "")
+            run_ssh_command.return_value = (0, "", "")
+
+            self.assertTrue(
+                deployer._validate_all(
+                    skip_clash=True,
+                    skip_autossh=True,
+                    skip_zsh=True,
+                    skip_web=True,
+                )
+            )
+
+        self.assertEqual(
+            [call.args[0] for call in run.call_args_list],
+            [
+                ["ssh-keygen", "-R", "203.0.113.10"],
+                ["ssh-keygen", "-R", "[203.0.113.10]:2222"],
+            ],
+        )
+
+    def test_local_validation_skips_known_hosts_cleanup(self):
+        from deployer import Deployer
+
+        config = FakeConfig(
+            {
+                "deployment": {"mode": "host", "target": "local"},
+                "cloud": {"host": "203.0.113.10", "user": "clouduser"},
+                "autossh": {"identity_file": "~/.ssh/id_ed25519_autossh"},
+            }
+        )
+        deployer = Deployer(config)
+
+        with patch("deployer.subprocess.run") as run:
+            self.assertTrue(deployer._validate_remote_sudo())
+
+        run.assert_not_called()
 
 
 if __name__ == "__main__":

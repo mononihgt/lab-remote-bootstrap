@@ -167,6 +167,7 @@ vim config/config.yaml
 #### 3. 部署到远程服务器
 
 **注意**：`lab-remote-ctl` 在本地运行，通过 SSH 控制远程服务器。
+远程部署开始前会自动清理 `target.host` / `target.ssh_port` 对应的本地 `known_hosts` 记录，避免反向隧道或重装系统后残留的 SSH 指纹导致隐藏失败。
 
 远程部署时的 SSH 配置示例：
 
