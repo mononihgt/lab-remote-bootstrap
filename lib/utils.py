@@ -69,12 +69,7 @@ def run_ssh_command(
     if local:
         # Run command locally using bash
         return run_command(["bash", "-c", cmd], check=False, capture_output=True)
-        identity_file: Path to SSH private key
-        port: SSH port
 
-    Returns:
-        Tuple of (returncode, stdout, stderr)
-    """
     ssh_cmd = ["ssh"]
 
     if identity_file:
