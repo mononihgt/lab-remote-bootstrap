@@ -65,8 +65,10 @@ class Deployer:
             print_info(f"Deployment target: LOCAL (deploying on this machine)")
             print_info(f"Current user: {getpass.getuser()}\n")
         else:
+            target_host = self.config.get('target.host', self.config.get('cloud.host'))
+            target_user = self.config.get('target.user', self.config.get('cloud.user'))
             print_info(f"Deployment target: REMOTE (via SSH)")
-            print_info(f"Target server: {self.config.get('cloud.user')}@{self.config.get('cloud.host')}\n")
+            print_info(f"Target server: {target_user}@{target_host}\n")
 
         if dry_run:
             print_warning("DRY RUN MODE - No actual changes will be made\n")
@@ -188,6 +190,10 @@ class Deployer:
         user = self.config.get('cloud.user')
         identity_file = self.config.get('deployment.ssh_identity_file')
         port = self.config.get('cloud.reverse_port', 2223)
+        host = self.config.get('target.host', host)
+        user = self.config.get('target.user', user)
+        identity_file = self.config.get('target.ssh_identity_file', identity_file)
+        port = self.config.get('target.ssh_port', port)
 
         returncode, _, stderr = run_ssh_command(
             host,

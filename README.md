@@ -38,7 +38,7 @@
 
 - Python 3.7+ 已安装
 - 可以通过 SSH 连接到云服务器和实验室服务器
-- 远程部署时，`deployment.ssh_identity_file` 是**本地机器上**用于连接实验室服务器的私钥；如果留空，则使用 `~/.ssh/config` 或 ssh-agent
+- 远程部署时，`target.ssh_identity_file` 是**本地机器上**用于连接实验室服务器的私钥；如果留空，则使用 `~/.ssh/config` 或 ssh-agent
 
 #### 2. 云服务器（用于反向 SSH 隧道）
 
@@ -82,7 +82,8 @@ ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 
 **重要**：这里有两个不同的 SSH 身份，不要混用：
 
-- `deployment.ssh_identity_file`：本地机器 → 实验室服务器，用于 `lab-remote-ctl` 远程部署。可留空以使用 `~/.ssh/config` 或 ssh-agent。
+- `target.*`：本地机器 → 实验室服务器，用于 `lab-remote-ctl` 远程部署。`target.ssh_identity_file` 可留空以使用 `~/.ssh/config` 或 ssh-agent。
+- `cloud.*`：实验室服务器 → 云服务器，用于 AutoSSH 反向隧道。`cloud.user` 是云服务器上的用户名，不是实验室服务器用户名。
 - `autossh.identity_file`：实验室服务器 → 云服务器，用于 AutoSSH 反向隧道。这里填写实验室服务器上的私钥路径，如 `~/.ssh/id_ed25519_autossh`。
 
 #### 4. 网络连通性
@@ -123,7 +124,7 @@ pip3 install -r requirements.txt
 **关键配置**：
 - `deployment.target` 设置为 `local`（本地部署模式）
 - 云服务器信息要正确填写（用于 AutoSSH 反向隧道）
-- `deployment.ssh_identity_file` 留空（本地部署不需要控制 SSH 私钥）
+- 不需要填写 `target.*`（本地部署不需要控制 SSH 私钥）
 - `autossh.identity_file` 填写服务器上的 SSH 私钥路径
 
 #### 3. 在服务器上执行部署
@@ -172,12 +173,23 @@ vim config/config.yaml
 ```yaml
 deployment:
   target: remote
-  # 本地私钥；留空表示使用 ~/.ssh/config 或 ssh-agent
-  ssh_identity_file: ""
+
+target:
+  # lab-remote-ctl 连接实验室服务器的方式
+  host: <target_ssh_host_or_cloud_tunnel_host>
+  user: <lab_user>
+  ssh_port: 2222
+  ssh_identity_file: ~/.ssh/<local_target_key>
+
+cloud:
+  # 实验室服务器上的 AutoSSH 连接云服务器的方式
+  host: <cloud_public_host>
+  user: <cloud_user>
+  reverse_port: 2222
 
 autossh:
   # 实验室服务器上的私钥路径，用于 AutoSSH 连接云服务器
-  identity_file: ~/.ssh/id_ed25519_autossh
+  identity_file: ~/.ssh/<server_autossh_key>
 ```
 
 ```bash
@@ -288,7 +300,7 @@ lab-remote-ctl
 │  本地 PC    │  1. 安装依赖: pip3 install -r requirements.txt
 │             │  2. 初始化配置: ./cli/lab-remote-ctl init --interactive
 └──────┬──────┘  3. 部署: ./cli/lab-remote-ctl deploy
-       │         4. 管理订阅: ./cli/lab-remote-ctl subscription add/update
+       │         4. 管理订阅: init 时填写 URL 或 subscription add/update
        │ SSH     5. Web 管理: ./cli/lab-remote-ctl web open
        ↓
 ┌──────────────────┐

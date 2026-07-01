@@ -5,7 +5,15 @@
 deployment:
   mode: host  # 'host' or 'docker'
   target: remote  # 'remote' (deploy via SSH) or 'local' (deploy on current machine)
-  # Optional local SSH key for remote deployment. Leave empty to use ~/.ssh/config or ssh-agent.
+  # Deprecated compatibility field. Prefer target.ssh_identity_file for new configs.
+  ssh_identity_file: ""
+
+# Lab server SSH target used by lab-remote-ctl for remote deployment
+target:
+  host: lab.example.com
+  user: labuser
+  ssh_port: 22
+  # Optional local SSH key. Leave empty to use ~/.ssh/config or ssh-agent.
   ssh_identity_file: ""
 
 # Cloud server configuration (for reverse SSH tunnel)

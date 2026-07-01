@@ -1,5 +1,6 @@
 # Local secrets/config
 config/config.yaml
+config/subscriptions.json
 docker/docker-stack.env
 host/host-stack.env
 local/dashboard.env

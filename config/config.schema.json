@@ -25,6 +25,30 @@
         }
       }
     },
+    "target": {
+      "type": "object",
+      "description": "Lab server SSH target used by lab-remote-ctl for remote deployment",
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ssh_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 22
+        },
+        "ssh_identity_file": {
+          "type": "string",
+          "description": "Optional local SSH private key used to control the lab server. Leave empty to use SSH config or agent."
+        }
+      }
+    },
     "cloud": {
       "type": "object",
       "required": ["host", "user"],

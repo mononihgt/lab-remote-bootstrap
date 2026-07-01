@@ -56,10 +56,16 @@ class DeploymentIdentitySplitTests(unittest.TestCase):
                     "target": "remote",
                     "ssh_identity_file": "~/.ssh/id_ed25519",
                 },
+                "target": {
+                    "host": "lab.example.com",
+                    "user": "labuser",
+                    "ssh_port": 2222,
+                    "ssh_identity_file": "~/.ssh/id_target",
+                },
                 "cloud": {
-                    "host": "39.106.136.35",
-                    "user": "mpxuann",
-                    "reverse_port": 2222,
+                    "host": "203.0.113.10",
+                    "user": "clouduser",
+                    "reverse_port": 2223,
                 },
                 "autossh": {
                     "identity_file": "~/.ssh/id_ed25519_autossh",
@@ -72,21 +78,24 @@ class DeploymentIdentitySplitTests(unittest.TestCase):
         self.assertEqual(
             module.get_deployment_params(),
             (
-                "39.106.136.35",
-                "mpxuann",
-                "~/.ssh/id_ed25519",
+                "lab.example.com",
+                "labuser",
+                "~/.ssh/id_target",
                 2222,
                 False,
             ),
         )
 
-    def test_remote_deployment_does_not_reuse_autossh_identity_for_control_ssh(self):
+    def test_remote_deployment_falls_back_to_old_control_ssh_fields(self):
         config = FakeConfig(
             {
-                "deployment": {"target": "remote"},
+                "deployment": {
+                    "target": "remote",
+                    "ssh_identity_file": "~/.ssh/id_ed25519",
+                },
                 "cloud": {
-                    "host": "39.106.136.35",
-                    "user": "mpxuann",
+                    "host": "203.0.113.10",
+                    "user": "clouduser",
                     "reverse_port": 2222,
                 },
                 "autossh": {
@@ -99,7 +108,34 @@ class DeploymentIdentitySplitTests(unittest.TestCase):
 
         self.assertEqual(
             module.get_deployment_params(),
-            ("39.106.136.35", "mpxuann", None, 2222, False),
+            ("203.0.113.10", "clouduser", "~/.ssh/id_ed25519", 2222, False),
+        )
+
+    def test_remote_deployment_does_not_reuse_autossh_identity_for_control_ssh(self):
+        config = FakeConfig(
+            {
+                "deployment": {"target": "remote"},
+                "target": {
+                    "host": "lab.example.com",
+                    "user": "labuser",
+                    "ssh_port": 2222,
+                },
+                "cloud": {
+                    "host": "203.0.113.10",
+                    "user": "clouduser",
+                    "reverse_port": 2223,
+                },
+                "autossh": {
+                    "identity_file": "~/.ssh/id_ed25519_autossh",
+                },
+            }
+        )
+
+        module = make_base_module(config)
+
+        self.assertEqual(
+            module.get_deployment_params(),
+            ("lab.example.com", "labuser", None, 2222, False),
         )
 
     def test_autossh_validation_does_not_require_server_side_key_on_local_machine(self):
@@ -109,7 +145,7 @@ class DeploymentIdentitySplitTests(unittest.TestCase):
         config = FakeConfig(
             {
                 "deployment": {"target": "remote"},
-                "cloud": {"host": "39.106.136.35", "user": "mpxuann"},
+                "cloud": {"host": "203.0.113.10", "user": "clouduser"},
                 "autossh": {"identity_file": missing_key},
             }
         )
@@ -128,7 +164,7 @@ class DeploymentIdentitySplitTests(unittest.TestCase):
                         "target": "remote",
                         "ssh_identity_file": identity.name,
                     },
-                    "cloud": {"host": "39.106.136.35", "user": "mpxuann"},
+                    "cloud": {"host": "203.0.113.10", "user": "clouduser"},
                     "autossh": {
                         "identity_file": "/server/side/id_autossh",
                     },
@@ -144,7 +180,7 @@ class DeploymentIdentitySplitTests(unittest.TestCase):
 
         config = FakeConfig(
             {
-                "cloud": {"host": "39.106.136.35", "user": "mpxuann"},
+                "cloud": {"host": "203.0.113.10", "user": "clouduser"},
                 "autossh": {"identity_file": "~/.ssh/id_ed25519_autossh"},
             }
         )
@@ -155,8 +191,8 @@ class DeploymentIdentitySplitTests(unittest.TestCase):
 
             self.assertTrue(
                 module._setup_ssh_key(
-                    host="39.106.136.35",
-                    user="mpxuann",
+                    host="203.0.113.10",
+                    user="clouduser",
                     control_identity_file=None,
                     port=2222,
                     autossh_identity_file="~/.ssh/id_ed25519_autossh",

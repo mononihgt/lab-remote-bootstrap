@@ -46,12 +46,18 @@ class DeployerPreflightTests(unittest.TestCase):
                 "deployment": {
                     "mode": "host",
                     "target": "remote",
-                    "ssh_identity_file": "~/.ssh/id_lab",
+                    "ssh_identity_file": "~/.ssh/id_target",
+                },
+                "target": {
+                    "host": "203.0.113.10",
+                    "user": "labuser",
+                    "ssh_port": 2222,
+                    "ssh_identity_file": "~/.ssh/id_target",
                 },
                 "cloud": {
-                    "host": "39.106.136.35",
-                    "user": "coreknowledge",
-                    "reverse_port": 2222,
+                    "host": "203.0.113.10",
+                    "user": "clouduser",
+                    "reverse_port": 2223,
                 },
                 "autossh": {"identity_file": "~/.ssh/id_ed25519_autossh"},
             }
@@ -71,10 +77,10 @@ class DeployerPreflightTests(unittest.TestCase):
             )
 
         run_ssh_command.assert_called_once_with(
-            "39.106.136.35",
-            "coreknowledge",
+            "203.0.113.10",
+            "labuser",
             "sudo -n true",
-            "~/.ssh/id_lab",
+            "~/.ssh/id_target",
             2222,
         )
 

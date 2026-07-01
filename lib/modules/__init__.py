@@ -80,11 +80,14 @@ class BaseModule(ABC):
                 True
             )
         else:
-            # Remote deployment: use cloud config
+            # Remote deployment: prefer target config, fall back to legacy cloud/deployment fields.
             return (
-                self.config.get('cloud.host'),
-                self.config.get('cloud.user'),
-                self.config.get('deployment.ssh_identity_file'),
-                self.config.get('cloud.reverse_port', 2223),
+                self.config.get('target.host', self.config.get('cloud.host')),
+                self.config.get('target.user', self.config.get('cloud.user')),
+                self.config.get(
+                    'target.ssh_identity_file',
+                    self.config.get('deployment.ssh_identity_file')
+                ),
+                self.config.get('target.ssh_port', self.config.get('cloud.reverse_port', 2223)),
                 False
             )
