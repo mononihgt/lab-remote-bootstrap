@@ -49,6 +49,20 @@ def init(ctx, mode, interactive):
         print_info("Interactive configuration wizard")
         click.echo("\nPlease provide the following information:")
 
+        # Deployment target
+        deployment_target = click.prompt(
+            "Deployment target",
+            type=click.Choice(['local', 'remote']),
+            default='remote',
+            show_choices=True
+        )
+
+        if deployment_target == 'local':
+            print_info("\n📍 Local deployment mode:")
+            print_info("  - Deploying directly on this machine")
+            print_info("  - No SSH connection needed")
+            print_info("  - Use this for first-time setup on lab server")
+
         # Cloud server
         cloud_host = click.prompt("Cloud server hostname", type=str)
         cloud_user = click.prompt("Cloud server user", type=str, default="ubuntu")
@@ -80,6 +94,7 @@ def init(ctx, mode, interactive):
 
 deployment:
   mode: {mode}
+  target: {deployment_target}
 
 cloud:
   host: {cloud_host}

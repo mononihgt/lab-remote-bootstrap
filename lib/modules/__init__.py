@@ -2,7 +2,7 @@
 """Base module interface for deployment modules."""
 
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 
 class BaseModule(ABC):
@@ -59,3 +59,33 @@ class BaseModule(ABC):
         """Log message if verbose mode is enabled."""
         if self.verbose:
             print(f"  [DEBUG] {message}")
+
+    def get_deployment_params(self) -> Tuple[str, str, Optional[str], int, bool]:
+        """
+        Get deployment parameters based on deployment target.
+
+        Returns:
+            Tuple of (host, user, identity_file, port, is_local)
+        """
+        is_local = self.config.is_local_deployment
+
+        if is_local:
+            # Local deployment: use localhost
+            import getpass
+            return (
+                "localhost",
+                getpass.getuser(),
+                None,
+                22,
+                True
+            )
+        else:
+            # Remote deployment: use cloud config
+            return (
+                self.config.get('cloud.host'),
+                self.config.get('cloud.user'),
+                self.config.get('autossh.identity_file'),
+                self.config.get('cloud.reverse_port', 2223),
+                False
+            )
+

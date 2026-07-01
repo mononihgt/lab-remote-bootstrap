@@ -152,6 +152,21 @@ class Config:
         return self.get('deployment.mode', 'host')
 
     @property
+    def deployment_target(self) -> str:
+        """Get deployment target (local or remote)."""
+        return self.get('deployment.target', 'remote')
+
+    @property
+    def is_local_deployment(self) -> bool:
+        """Check if deploying on local machine."""
+        return self.deployment_target == 'local'
+
+    @property
+    def is_remote_deployment(self) -> bool:
+        """Check if deploying via SSH."""
+        return self.deployment_target == 'remote'
+
+    @property
     def is_docker_mode(self) -> bool:
         """Check if deployment mode is docker."""
         return self.deployment_mode == 'docker'

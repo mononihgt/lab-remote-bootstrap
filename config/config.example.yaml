@@ -1,9 +1,10 @@
 # Lab Remote Bootstrap Configuration
 # Copy this file to config.yaml and customize for your setup
 
-# Deployment mode: 'host' or 'docker'
+# Deployment configuration
 deployment:
-  mode: host
+  mode: host  # 'host' or 'docker'
+  target: remote  # 'remote' (deploy via SSH) or 'local' (deploy on current machine)
 
 # Cloud server configuration (for reverse SSH tunnel)
 cloud:

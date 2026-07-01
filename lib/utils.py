@@ -50,14 +50,25 @@ def run_ssh_command(
     cmd: str,
     identity_file: Optional[str] = None,
     port: int = 22,
+    local: bool = False,
 ) -> Tuple[int, str, str]:
     """
-    Run command on remote host via SSH.
+    Run command on remote host via SSH, or locally if local=True.
 
     Args:
         host: Remote hostname
         user: SSH user
         cmd: Command to execute
+        identity_file: Path to SSH private key
+        port: SSH port
+        local: If True, run command locally instead of via SSH
+
+    Returns:
+        Tuple of (returncode, stdout, stderr)
+    """
+    if local:
+        # Run command locally using bash
+        return run_command(["bash", "-c", cmd], check=False, capture_output=True)
         identity_file: Path to SSH private key
         port: SSH port
 
@@ -88,9 +99,10 @@ def upload_file(
     user: str,
     identity_file: Optional[str] = None,
     port: int = 22,
+    local: bool = False,
 ) -> bool:
     """
-    Upload file to remote host via SCP.
+    Upload file to remote host via SCP, or copy locally if local=True.
 
     Args:
         local_path: Local file path
@@ -99,10 +111,22 @@ def upload_file(
         user: SSH user
         identity_file: Path to SSH private key
         port: SSH port
+        local: If True, copy file locally instead of via SCP
 
     Returns:
         True if successful
     """
+    if local:
+        # Copy file locally
+        import shutil
+        try:
+            Path(remote_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(local_path, remote_path)
+            return True
+        except Exception as e:
+            print_error(f"Failed to copy file: {e}")
+            return False
+
     scp_cmd = ["scp"]
 
     if identity_file:

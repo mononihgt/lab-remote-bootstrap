@@ -10,7 +10,14 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["host", "docker"]
+          "enum": ["host", "docker"],
+          "description": "Deployment mode: host (direct) or docker (containerized)"
+        },
+        "target": {
+          "type": "string",
+          "enum": ["local", "remote"],
+          "default": "remote",
+          "description": "Deployment target: local (on current machine) or remote (via SSH)"
         }
       }
     },

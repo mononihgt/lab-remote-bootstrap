@@ -95,7 +95,51 @@ ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 pip3 install -r requirements.txt
 ```
 
-### 方式 1：全新部署
+### 方式 1：全新部署（首次部署 - 在实验室服务器上操作）
+
+如果本地无法直接 SSH 到实验室服务器（服务器在内网），需要先在实验室服务器上进行首次部署：
+
+#### 1. 将项目拷贝到实验室服务器
+
+```bash
+# 方式 A: 使用 U 盘或其他物理介质
+# 方式 B: 如果服务器可以访问 GitHub
+git clone https://github.com/mononihgt/lab-remote-bootstrap.git
+cd lab-remote-bootstrap
+pip3 install -r requirements.txt
+```
+
+#### 2. 在服务器上初始化配置
+
+```bash
+# 在实验室服务器上执行
+./cli/lab-remote-ctl init --interactive
+```
+
+**关键配置**：
+- `deployment.target` 设置为 `local`（本地部署模式）
+- 云服务器信息要正确填写（用于 AutoSSH 反向隧道）
+- `autossh.identity_file` 填写服务器上的 SSH 私钥路径
+
+#### 3. 在服务器上执行部署
+
+```bash
+# 在实验室服务器上执行
+./cli/lab-remote-ctl deploy
+```
+
+首次部署完成后，AutoSSH 会建立到云服务器的反向隧道，之后就可以从任何地方通过云服务器访问实验室服务器了：
+
+```bash
+# 从任何地方连接
+ssh -p 2223 <lab_user>@<cloud_host>
+```
+
+**后续管理**：首次部署完成后，可以在本地使用 `lab-remote-ctl` 远程管理（将 `deployment.target` 改为 `remote`）。
+
+---
+
+### 方式 2：远程部署（本地可 SSH 到服务器）
 
 #### 1. 初始化配置
 
@@ -172,7 +216,7 @@ ssh -p 2223 <lab_user>@<cloud_host>
 ./cli/lab-remote-ctl web stop
 ```
 
-### 方式 2：从旧版本迁移
+### 方式 3：从旧版本迁移
 
 ```bash
 # 迁移旧版本配置

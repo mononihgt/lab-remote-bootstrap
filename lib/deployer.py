@@ -56,7 +56,14 @@ class Deployer:
 
         print_info(f"Configuration: {self.config.config_path}")
         print_info(f"Deployment mode: {self.config.deployment_mode}")
-        print_info(f"Target server: {self.config.get('cloud.user')}@{self.config.get('cloud.host')}\n")
+
+        if self.config.is_local_deployment:
+            import getpass
+            print_info(f"Deployment target: LOCAL (deploying on this machine)")
+            print_info(f"Current user: {getpass.getuser()}\n")
+        else:
+            print_info(f"Deployment target: REMOTE (via SSH)")
+            print_info(f"Target server: {self.config.get('cloud.user')}@{self.config.get('cloud.host')}\n")
 
         if dry_run:
             print_warning("DRY RUN MODE - No actual changes will be made\n")
