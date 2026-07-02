@@ -10,6 +10,8 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CLI_PATH = PROJECT_ROOT / "cli" / "lab-remote-ctl"
+LIB_DIR = PROJECT_ROOT / "lib"
+sys.path.insert(0, str(LIB_DIR))
 
 
 def load_cli_module():
@@ -65,6 +67,7 @@ class InitConfigGenerationTests(unittest.TestCase):
 
     def test_remote_subscription_paths_use_project_config_directory(self):
         cli = load_cli_module()
+        from subscription_paths import resolve_subscription_paths
 
         class Config:
             is_remote_deployment = True
@@ -72,13 +75,14 @@ class InitConfigGenerationTests(unittest.TestCase):
             def get(self, key_path, default=None):
                 return default
 
-        paths = cli.resolve_subscription_paths(Config())
+        paths = resolve_subscription_paths(Config())
 
         self.assertEqual(paths.subscriptions_file, PROJECT_ROOT / "config" / "subscriptions.json")
         self.assertEqual(paths.config_file, PROJECT_ROOT / "config" / "clash.generated.yaml")
 
     def test_local_subscription_paths_use_install_root(self):
         cli = load_cli_module()
+        from subscription_paths import resolve_subscription_paths
 
         class Config:
             is_remote_deployment = False
@@ -88,7 +92,7 @@ class InitConfigGenerationTests(unittest.TestCase):
                     return "/tmp/lab-stack"
                 return default
 
-        paths = cli.resolve_subscription_paths(Config())
+        paths = resolve_subscription_paths(Config())
 
         self.assertEqual(paths.subscriptions_file, Path("/tmp/lab-stack/clash/subscriptions.json"))
         self.assertEqual(paths.config_file, Path("/tmp/lab-stack/clash/config.yaml"))

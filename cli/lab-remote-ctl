@@ -19,13 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 import click
 from config import Config, ConfigError, load_config
+from subscription_paths import SubscriptionPaths, resolve_subscription_paths
 from utils import print_error, print_success, print_info
-
-
-@dataclass
-class SubscriptionPaths:
-    subscriptions_file: Path
-    config_file: Path
 
 
 @dataclass
@@ -34,22 +29,6 @@ class WebAccess:
     tunnel_command: Optional[str] = None
     tunnel_args: Optional[List[str]] = None
     local_web_port: Optional[int] = None
-
-
-def resolve_subscription_paths(config) -> SubscriptionPaths:
-    """Resolve subscription storage paths for local or remote deployments."""
-    if config.is_remote_deployment:
-        project_root = Path(__file__).parent.parent
-        return SubscriptionPaths(
-            subscriptions_file=project_root / "config" / "subscriptions.json",
-            config_file=project_root / "config" / "clash.generated.yaml",
-        )
-
-    install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
-    return SubscriptionPaths(
-        subscriptions_file=Path(install_root) / "clash" / "subscriptions.json",
-        config_file=Path(install_root) / "clash" / "config.yaml",
-    )
 
 
 def resolve_web_access(config) -> WebAccess:
