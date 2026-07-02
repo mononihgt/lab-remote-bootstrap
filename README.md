@@ -179,14 +179,16 @@ target:
   # lab-remote-ctl 连接实验室服务器的方式
   host: <target_ssh_host_or_cloud_tunnel_host>
   user: <lab_user>
-  ssh_port: 2222
+  # 如果要重新部署 AutoSSH，不要使用 cloud.reverse_port 所在的同一个云端口。
+  # 这里应填写直连实验室服务器的维护端口，或另一个独立的反向隧道端口。
+  ssh_port: 2224
   ssh_identity_file: ~/.ssh/<local_target_key>
 
 cloud:
   # 实验室服务器上的 AutoSSH 连接云服务器的方式
   host: <cloud_public_host>
   user: <cloud_user>
-  reverse_port: 2222
+  reverse_port: 2223
   # 反向 SSH 在云服务器上的监听地址；需要公网直连时用 0.0.0.0
   reverse_bind_address: 0.0.0.0
 
@@ -201,6 +203,7 @@ autossh:
 
 # 选择性部署
 ./cli/lab-remote-ctl deploy --skip-web  # 跳过 Web 界面
+./cli/lab-remote-ctl deploy --skip-autossh  # 只通过现有反向隧道更新其他模块
 ./cli/lab-remote-ctl deploy --dry-run   # 预览部署计划
 ```
 
@@ -211,6 +214,14 @@ ssh -p 2223 <lab_user>@<cloud_host>
 ```
 
 重新部署 AutoSSH 时，`lab-remote-ctl deploy` 会先通过实验室服务器登录云服务器，清理同一 `cloud.reverse_port` 上的旧监听进程，再重启 `lab-autossh.service`。这可以恢复旧反向隧道半死时出现的 `Connection timed out during banner exchange`。
+
+因此，完整部署（包含 AutoSSH）不能通过正在被 AutoSSH 管理的同一个云端反向隧道执行。也就是说，当 `deployment.target: remote`、`target.host` 等于 `cloud.host`，并且 `target.ssh_port` 等于 `cloud.reverse_port` 时，`lab-remote-ctl deploy` 会在预检阶段拒绝继续，避免部署进程断开自己的 SSH 连接。
+
+需要远程维护时请选择以下方式之一：
+
+- 如果只更新 Clash、Zsh 或 Web，使用现有反向隧道执行 `./cli/lab-remote-ctl deploy --skip-autossh`。
+- 如果需要重新部署 AutoSSH，使用独立维护通道设置 `target.*`，例如直连实验室服务器的 SSH 端口、VPN 内网地址，或另一个不会被本次 AutoSSH 配置清理/重启的反向隧道端口。
+- 如果没有独立维护通道，先 SSH 到实验室服务器，在服务器本机将 `deployment.target` 设为 `local` 后执行 `./cli/lab-remote-ctl deploy`。
 
 `deploy` 结束时会根据本次实际结果输出对应的 Next steps：成功部署的模块会显示后续操作，跳过的模块不会显示对应步骤，Zsh/Web 等非关键模块失败时会优先提示修复并重新部署。
 
@@ -600,4 +611,4 @@ reset
 
 ## 待完善功能
 
-- [ ] 当使用云服务器对局域网服务器进行remote deploy时，会因为使用同一个端口而导致链接断开，无法进行后续deploy
+暂无。

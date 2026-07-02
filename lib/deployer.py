@@ -166,6 +166,9 @@ class Deployer:
         """Validate all modules."""
         print_info("[1/7] Pre-deployment validation")
 
+        if not self._validate_autossh_control_path(skip_autossh):
+            return False
+
         if not self._validate_remote_sudo():
             return False
 
@@ -193,6 +196,67 @@ class Deployer:
 
         print_success("Validation passed")
         return True
+
+    def _validate_autossh_control_path(self, skip_autossh: bool) -> bool:
+        """Reject AutoSSH redeploys that would restart the active SSH route."""
+        if skip_autossh or self.config.is_local_deployment:
+            return True
+
+        target_host, _, _, target_port = self._get_remote_target_params()
+        cloud_host = self.config.get('cloud.host')
+        reverse_port = self.config.get('cloud.reverse_port', 2223)
+        target_port = self._parse_port(target_port, "target.ssh_port")
+        reverse_port = self._parse_port(reverse_port, "cloud.reverse_port")
+        if target_port is None or reverse_port is None:
+            return False
+
+        target_host = self._normalize_host(target_host)
+        cloud_host = self._normalize_host(cloud_host)
+        if (
+            target_host is not None
+            and cloud_host is not None
+            and target_host == cloud_host
+            and target_port == reverse_port
+        ):
+            print_error("Unsafe remote AutoSSH deploy configuration")
+            print_info(
+                "The deployment SSH target uses the same host and port as "
+                "cloud.reverse_port."
+            )
+            print_info(
+                "Redeploying AutoSSH would clean or restart the reverse tunnel "
+                "that is carrying this deployment connection."
+            )
+            print_info(
+                "Use a separate target.* maintenance SSH endpoint, run deploy "
+                "from the lab server with deployment.target: local, or re-run "
+                "with --skip-autossh when updating only other modules."
+            )
+            return False
+
+        return True
+
+    @staticmethod
+    def _normalize_host(host):
+        """Normalize host strings for config endpoint comparisons."""
+        if host is None:
+            return None
+        return str(host).strip().strip("[]").rstrip(".").lower()
+
+    @staticmethod
+    def _parse_port(value, name):
+        """Parse a configured TCP port for preflight endpoint comparisons."""
+        try:
+            port = int(value)
+        except (TypeError, ValueError):
+            print_error(f"{name} must be a numeric TCP port")
+            return None
+
+        if port < 1 or port > 65535:
+            print_error(f"{name} must be between 1 and 65535")
+            return None
+
+        return port
 
     def _validate_remote_sudo(self) -> bool:
         """Validate non-interactive sudo for remote deployments."""
