@@ -25,8 +25,6 @@ except ConfigError as e:
     print(f"Configuration error: {e}")
     sys.exit(1)
 
-# Get paths from config
-install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
 project_root = Path(__file__).parent.parent
 subscription_paths = resolve_subscription_paths(
     config,
@@ -212,7 +210,7 @@ def get_config():
                 'clash_api_port': clash_api_port,
                 'clash_http_port': config.get('clash.http_port', 7890),
                 'clash_socks_port': config.get('clash.socks_port', 7891),
-                'install_root': install_root
+                'install_root': config.get('clash.install_root', '/opt/lab-remote-stack')
             }
         })
     except Exception as e:
