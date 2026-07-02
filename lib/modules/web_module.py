@@ -163,7 +163,7 @@ sudo chown -R {user}:{user} {install_root}/lib
         """Upload local Python modules required by the Web app."""
         project_root = get_project_root()
         lib_dir = project_root / "lib"
-        runtime_modules = ["config.py", "subscription.py", "health.py", "utils.py"]
+        runtime_modules = ["config.py", "subscription.py", "subscription_paths.py", "health.py", "utils.py"]
 
         for module_name in runtime_modules:
             source_path = lib_dir / module_name

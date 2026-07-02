@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 from flask import Flask, render_template, jsonify, request, Response
 from config import load_config, ConfigError
 from subscription import Subscription
+from subscription_paths import resolve_subscription_paths
 from health import HealthCheck
 import requests
 
@@ -26,11 +27,16 @@ except ConfigError as e:
 
 # Get paths from config
 install_root = config.get('clash.install_root', '/opt/lab-remote-stack')
-subscriptions_file = f"{install_root}/clash/subscriptions.json"
-config_file = f"{install_root}/clash/config.yaml"
+project_root = Path(__file__).parent.parent
+subscription_paths = resolve_subscription_paths(
+    config,
+    project_root=project_root,
+    runtime_context="web",
+)
+subscriptions_file = str(subscription_paths.subscriptions_file)
+config_file = str(subscription_paths.config_file)
 
 # Get project root for templates
-project_root = Path(__file__).parent.parent
 template_dir = str(project_root / "assets" / "clash" / "templates")
 
 # Clash API endpoint

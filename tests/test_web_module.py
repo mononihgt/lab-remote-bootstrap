@@ -35,7 +35,7 @@ class WebModuleTests(unittest.TestCase):
             web_dir.mkdir()
             lib_dir.mkdir()
             (web_dir / "app.py").write_text("print('web')\n")
-            for name in ["config.py", "subscription.py", "health.py", "utils.py"]:
+            for name in ["config.py", "subscription.py", "subscription_paths.py", "health.py", "utils.py"]:
                 (lib_dir / name).write_text(f"# {name}\n")
 
             module = WebModule(FakeConfig())
@@ -52,6 +52,7 @@ class WebModuleTests(unittest.TestCase):
                     "/opt/lab-remote-stack/web/app.py",
                     "/opt/lab-remote-stack/lib/config.py",
                     "/opt/lab-remote-stack/lib/subscription.py",
+                    "/opt/lab-remote-stack/lib/subscription_paths.py",
                     "/opt/lab-remote-stack/lib/health.py",
                     "/opt/lab-remote-stack/lib/utils.py",
                 ],
