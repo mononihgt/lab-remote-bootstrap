@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 import click
 from config import Config, ConfigError, load_config
-from subscription_paths import SubscriptionPaths, resolve_subscription_paths
+from subscription_paths import resolve_subscription_paths
 from utils import print_error, print_success, print_info
 
 
