@@ -4,6 +4,7 @@ config/subscriptions.json
 docker/docker-stack.env
 host/host-stack.env
 local/dashboard.env
+.worktrees/
 
 # Clash assets are usually private or large
 assets/clash/config.yaml
