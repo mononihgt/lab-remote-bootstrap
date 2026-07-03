@@ -1,6 +1,7 @@
 # Local secrets/config
 config/config.yaml
 config/subscriptions.json
+config/clash.generated.yaml
 docker/docker-stack.env
 host/host-stack.env
 local/dashboard.env
