@@ -10,7 +10,6 @@ import json
 import socket
 import subprocess
 from pathlib import Path
-from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -222,27 +221,12 @@ web:
 """
 
 
-def build_subscriptions_content(subscription_url: str, template: str) -> str:
-    """Build initial subscriptions.json content, or None when no URL is provided."""
-    if not subscription_url:
-        return None
-
-    added_at = datetime.utcnow().isoformat() + "Z"
+def build_subscriptions_content() -> str:
+    """Build an empty subscriptions.json seed file."""
     data = {
         "version": "1.0",
-        "active": "Default",
-        "subscriptions": [
-            {
-                "name": "Default",
-                "url": subscription_url,
-                "type": None,
-                "template": template,
-                "added_at": added_at,
-                "last_update": None,
-                "node_count": 0,
-                "status": "active",
-            }
-        ],
+        "active": None,
+        "subscriptions": [],
     }
     return json.dumps(data, indent=2, ensure_ascii=False)
 
@@ -376,10 +360,6 @@ def init(ctx, mode, interactive):
             default="~/.ssh/id_ed25519_autossh"
         )
 
-        subscription_url = ""
-        if click.confirm("Add VPN subscription URL now?", default=False):
-            subscription_url = click.prompt("VPN subscription URL", type=str)
-
         # Generate config
         config_content = build_config_content(
             mode=mode,
@@ -412,12 +392,9 @@ docker:
         target_config.write_text(config_content)
         print_success(f"Configuration saved to {target_config}")
 
-        subscriptions_content = build_subscriptions_content(subscription_url, "balanced")
-        if subscriptions_content:
-            subscriptions_file = project_root / "config" / "subscriptions.json"
-            subscriptions_file.write_text(subscriptions_content)
-            print_success(f"Initial VPN subscription saved to {subscriptions_file}")
-            print_info("Initial VPN subscription is stored in workspace scope.")
+        subscriptions_file = project_root / "config" / "subscriptions.json"
+        subscriptions_file.write_text(build_subscriptions_content())
+        print_success(f"Empty subscription state saved to {subscriptions_file}")
 
     else:
         # Non-interactive: copy example
@@ -432,9 +409,9 @@ docker:
 
     print_info(f"\nNext steps:")
     print_info(f"  1. Edit {target_config} to customize your setup")
-    print_info(f"  2. Run 'lab-remote-ctl deploy' to deploy")
-    if interactive and subscription_url:
-        print_info("  3. Run 'lab-remote-ctl subscription update Default' to apply the initial subscription to the live target")
+    print_info("  2. Add an initial subscription with 'lab-remote-ctl subscription add <name> <url> --scope workspace'")
+    print_info("  3. Run 'lab-remote-ctl subscription update <name> --scope workspace' to generate Clash config")
+    print_info(f"  4. Run 'lab-remote-ctl deploy' to deploy")
 
 
 @cli.command()

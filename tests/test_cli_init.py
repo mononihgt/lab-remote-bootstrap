@@ -1,11 +1,13 @@
 import json
 import sys
+import tempfile
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from unittest.mock import patch
 
 import yaml
+from click.testing import CliRunner
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -45,25 +47,53 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertEqual(data["cloud"]["reverse_port"], 2222)
         self.assertNotIn("ssh_identity_file", data["deployment"])
 
-    def test_subscription_seed_json_contains_default_subscription(self):
+    def test_subscription_seed_json_is_empty_by_default(self):
         cli = load_cli_module()
 
-        content = cli.build_subscriptions_content(
-            subscription_url="https://example.com/sub",
-            template="balanced",
-        )
+        content = cli.build_subscriptions_content()
         data = json.loads(content)
 
-        self.assertEqual(data["active"], "Default")
-        self.assertEqual(data["subscriptions"][0]["name"], "Default")
-        self.assertEqual(data["subscriptions"][0]["url"], "https://example.com/sub")
-        self.assertEqual(data["subscriptions"][0]["template"], "balanced")
-        self.assertEqual(data["subscriptions"][0]["status"], "active")
+        self.assertIsNone(data["active"])
+        self.assertEqual(data["subscriptions"], [])
 
-    def test_empty_subscription_url_skips_seed_json(self):
+    def test_interactive_init_does_not_prompt_for_default_subscription(self):
         cli = load_cli_module()
 
-        self.assertIsNone(cli.build_subscriptions_content("", "balanced"))
+        inputs = "\n".join(
+            [
+                "remote",
+                "203.0.113.10",
+                "labuser",
+                "2222",
+                "",
+                "198.51.100.10",
+                "clouduser",
+                "2223",
+                "host",
+                "7890",
+                "7891",
+                "9090",
+                "~/.ssh/id_ed25519_autossh",
+            ]
+        ) + "\n"
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            fake_cli_path = Path(tempdir) / "cli" / "lab-remote-ctl"
+            fake_cli_path.parent.mkdir(parents=True)
+
+            with patch.object(cli, "__file__", str(fake_cli_path)):
+                result = CliRunner().invoke(cli.cli, ["init", "--interactive"], input=inputs)
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertNotIn("Add VPN subscription URL now?", result.output)
+        self.assertIn(
+            "lab-remote-ctl subscription add <name> <url> --scope workspace",
+            result.output,
+        )
+        self.assertIn(
+            "lab-remote-ctl subscription update <name> --scope workspace",
+            result.output,
+        )
 
     def test_default_subscription_paths_use_live_install_root(self):
         cli = load_cli_module()

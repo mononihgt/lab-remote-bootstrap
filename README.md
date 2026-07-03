@@ -237,6 +237,8 @@ ssh -p 2223 <lab_user>@<cloud_host>
 - `deployment.target: remote`：通过 `target.*` SSH 配置操作实验室服务器上的 live 文件。
 - `deployment.target: local`：直接操作当前机器上的 live 文件，适合在实验室服务器本机执行 CLI。
 
+`init --interactive` 只会创建空的订阅状态，不会内置 `Default` 订阅或保存 VPN URL。需要代理节点时，用户必须显式添加订阅并执行 update。首次部署前添加订阅时应使用 `--scope workspace`，先生成待发布的 Clash 配置，再执行 `deploy`。
+
 live 文件默认位于：
 
 ```text
@@ -265,14 +267,13 @@ config/clash.generated.yaml
 ./cli/lab-remote-ctl subscription list --scope workspace
 
 # 只更新 workspace，稍后再通过 deploy 发布
+./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription --scope workspace
 ./cli/lab-remote-ctl subscription update "主力节点" --scope workspace
 ./cli/lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web
 
 # 标记订阅为 active；要重新生成 Clash 配置仍需 update
 ./cli/lab-remote-ctl subscription activate "主力节点"
 ```
-
-`init --interactive` 中填写的初始 VPN 订阅只会写入 workspace。完成首次部署后，运行 `lab-remote-ctl subscription update Default` 才会把该订阅下载、生成配置并应用到 live 目标。
 
 #### 5. 健康检查
 
