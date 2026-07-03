@@ -256,6 +256,8 @@ ssh -p 2223 <lab_user>@<cloud_host>
 ./cli/lab-remote-ctl health --json
 ```
 
+当 `deployment.target: remote` 时，健康检查会通过 `target.*` SSH 配置在实验室服务器上检查进程、监听端口、Clash API 和代理连通性；本地机器不会再被误判为部署目标。
+
 #### 6. Web 管理界面
 
 ```bash

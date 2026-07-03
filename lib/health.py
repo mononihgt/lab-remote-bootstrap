@@ -2,24 +2,70 @@
 """Health check system for lab-remote-bootstrap."""
 
 import json
+import re
+import shlex
 import subprocess
 import time
 from typing import Dict, List, Optional, Tuple
 
 import requests
 
+from utils import run_ssh_command
+
 
 class HealthCheck:
     """Health check system."""
 
-    def __init__(self, config):
+    def __init__(self, config, runtime_context: str = "controller"):
         """
         Initialize health checker.
 
         Args:
             config: Config instance
+            runtime_context: "controller" when running from the machine that
+                controls deployment, or "target" when already running on the
+                deployment target.
         """
         self.config = config
+        self.runtime_context = runtime_context
+
+    def _is_remote_deployment(self) -> bool:
+        """Return True when health checks should run on the SSH target."""
+        return (
+            self.runtime_context == "controller"
+            and self.config.get('deployment.target', 'remote') == 'remote'
+        )
+
+    def _get_remote_target_params(self) -> Tuple[str, str, Optional[str], int]:
+        """Get target SSH parameters for remote health checks."""
+        host = self.config.get('cloud.host')
+        user = self.config.get('cloud.user')
+        identity_file = self.config.get('deployment.ssh_identity_file')
+        port = self.config.get('cloud.reverse_port', 2223)
+        host = self.config.get('target.host', host)
+        user = self.config.get('target.user', user)
+        identity_file = self.config.get('target.ssh_identity_file', identity_file)
+        port = self.config.get('target.ssh_port', port)
+        return host, user, identity_file, port
+
+    def _run_system_command(self, cmd: List[str], timeout: int = 5) -> Tuple[int, str, str]:
+        """Run a system command locally or on the configured remote target."""
+        if self._is_remote_deployment():
+            shell_cmd = " ".join(shlex.quote(str(part)) for part in cmd)
+            return self._run_remote_shell_command(shell_cmd)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        return result.returncode, result.stdout, result.stderr
+
+    def _run_remote_shell_command(self, cmd: str) -> Tuple[int, str, str]:
+        """Run a shell command on the remote deployment target."""
+        host, user, identity_file, port = self._get_remote_target_params()
+        return run_ssh_command(host, user, cmd, identity_file, port)
 
     def run_all(self, check_connectivity: bool = True) -> Dict:
         """
@@ -87,16 +133,19 @@ class HealthCheck:
             Check result dict
         """
         try:
-            result = subprocess.run(
-                ['ps', 'aux'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            returncode, stdout, stderr = self._run_system_command(['ps', 'aux'])
+            if returncode != 0:
+                return {
+                    'category': 'service',
+                    'name': f'{service_name.lower()}_process',
+                    'status': 'fail',
+                    'message': f'Failed to check {service_name} process: {stderr}',
+                    'details': {}
+                }
 
             lines = [
-                line for line in result.stdout.split('\n')
-                if pattern in line and 'grep' not in line
+                line for line in stdout.split('\n')
+                if re.search(pattern, line) and 'grep' not in line
             ]
 
             if lines:
@@ -156,23 +205,13 @@ class HealthCheck:
         """
         try:
             # Try ss first (modern)
-            result = subprocess.run(
-                ['ss', '-tlnp'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            returncode, stdout, _ = self._run_system_command(['ss', '-tlnp'])
 
-            if result.returncode != 0:
+            if returncode != 0:
                 # Fall back to netstat
-                result = subprocess.run(
-                    ['netstat', '-tlnp'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
+                returncode, stdout, _ = self._run_system_command(['netstat', '-tlnp'])
 
-            if str(port) in result.stdout:
+            if str(port) in stdout:
                 return {
                     'category': 'port',
                     'name': name,
@@ -220,6 +259,35 @@ class HealthCheck:
         api_port = self.config.get('clash.api_port', 9090)
         url = f'http://127.0.0.1:{api_port}/version'
 
+        if self._is_remote_deployment():
+            script = (
+                "import json, urllib.request\n"
+                f"url = {url!r}\n"
+                "with urllib.request.urlopen(url, timeout=5) as response:\n"
+                "    data = json.load(response)\n"
+                "print(data.get('version', 'unknown'))\n"
+            )
+            cmd = f"python3 -c {shlex.quote(script)}"
+            returncode, stdout, stderr = self._run_remote_shell_command(cmd)
+            if returncode == 0:
+                version = stdout.strip() or 'unknown'
+                return {
+                    'category': 'connectivity',
+                    'name': 'clash_api',
+                    'status': 'pass',
+                    'message': f'Clash API accessible on target (version: {version})',
+                    'details': {'version': version, 'url': url, 'target': 'remote'}
+                }
+
+            details = stderr.strip() or stdout.strip()
+            return {
+                'category': 'connectivity',
+                'name': 'clash_api',
+                'status': 'fail',
+                'message': f'Clash API not accessible on target at {url}',
+                'details': {'url': url, 'target': 'remote', 'error': details}
+            }
+
         try:
             response = requests.get(url, timeout=5)
             response.raise_for_status()
@@ -255,6 +323,66 @@ class HealthCheck:
         http_port = self.config.get('clash.http_port', 7890)
         test_url = 'http://www.gstatic.com/generate_204'
         proxy_url = f'http://127.0.0.1:{http_port}'
+
+        if self._is_remote_deployment():
+            script = (
+                "import urllib.request\n"
+                f"proxy_url = {proxy_url!r}\n"
+                f"test_url = {test_url!r}\n"
+                "opener = urllib.request.build_opener(\n"
+                "    urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})\n"
+                ")\n"
+                "with opener.open(test_url, timeout=10) as response:\n"
+                "    print(response.getcode())\n"
+            )
+            cmd = f"python3 -c {shlex.quote(script)}"
+            returncode, stdout, stderr = self._run_remote_shell_command(cmd)
+            if returncode != 0:
+                details = stderr.strip() or stdout.strip()
+                return {
+                    'category': 'connectivity',
+                    'name': 'proxy_connectivity',
+                    'status': 'fail',
+                    'message': f'Proxy connectivity test failed on target: {details}',
+                    'details': {'test_url': test_url, 'target': 'remote'}
+                }
+
+            status_text = stdout.strip().splitlines()[-1] if stdout.strip() else ''
+            try:
+                status_code = int(status_text)
+            except ValueError:
+                return {
+                    'category': 'connectivity',
+                    'name': 'proxy_connectivity',
+                    'status': 'fail',
+                    'message': f'Proxy connectivity returned invalid status on target: {status_text}',
+                    'details': {'test_url': test_url, 'target': 'remote'}
+                }
+
+            if status_code in [200, 204]:
+                return {
+                    'category': 'connectivity',
+                    'name': 'proxy_connectivity',
+                    'status': 'pass',
+                    'message': f'HTTP proxy connectivity OK on target ({status_code})',
+                    'details': {
+                        'http_code': status_code,
+                        'test_url': test_url,
+                        'target': 'remote'
+                    }
+                }
+
+            return {
+                'category': 'connectivity',
+                'name': 'proxy_connectivity',
+                'status': 'fail',
+                'message': f'HTTP proxy returned unexpected code on target: {status_code}',
+                'details': {
+                    'http_code': status_code,
+                    'test_url': test_url,
+                    'target': 'remote'
+                }
+            }
 
         try:
             response = requests.get(

@@ -155,7 +155,7 @@ def update_subscription(name):
 def get_health():
     """Get system health status."""
     try:
-        checker = HealthCheck(config)
+        checker = HealthCheck(config, runtime_context="target")
         results = checker.run_all(check_connectivity=True)
 
         return jsonify({
