@@ -18,12 +18,16 @@ def resolve_subscription_paths(
     config,
     project_root: Optional[Path] = None,
     runtime_context: str = "cli",
+    scope: str = "live",
 ) -> SubscriptionPaths:
     """Resolve subscription storage paths for CLI or deployed Web runtime."""
     if runtime_context not in {"cli", "web"}:
         raise ValueError(f"Unknown subscription runtime context: {runtime_context}")
 
-    if runtime_context == "cli" and config.is_remote_deployment:
+    if scope not in {"live", "workspace"}:
+        raise ValueError(f"Unknown subscription scope: {scope}")
+
+    if runtime_context == "cli" and scope == "workspace":
         root = project_root or Path(__file__).resolve().parents[1]
         return SubscriptionPaths(
             subscriptions_file=root / "config" / "subscriptions.json",

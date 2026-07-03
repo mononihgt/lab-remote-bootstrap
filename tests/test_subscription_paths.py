@@ -21,7 +21,7 @@ class FakeConfig:
 
 
 class SubscriptionPathTests(unittest.TestCase):
-    def test_cli_remote_context_uses_project_config_files(self):
+    def test_cli_remote_context_defaults_to_live_install_root_files(self):
         from subscription_paths import resolve_subscription_paths
 
         with tempfile.TemporaryDirectory() as root:
@@ -30,6 +30,21 @@ class SubscriptionPathTests(unittest.TestCase):
                 FakeConfig(remote=True, install_root="/opt/lab-remote-stack"),
                 project_root=project_root,
                 runtime_context="cli",
+            )
+
+        self.assertEqual(paths.subscriptions_file, Path("/opt/lab-remote-stack/clash/subscriptions.json"))
+        self.assertEqual(paths.config_file, Path("/opt/lab-remote-stack/clash/config.yaml"))
+
+    def test_cli_workspace_scope_uses_project_config_files(self):
+        from subscription_paths import resolve_subscription_paths
+
+        with tempfile.TemporaryDirectory() as root:
+            project_root = Path(root)
+            paths = resolve_subscription_paths(
+                FakeConfig(remote=True, install_root="/opt/lab-remote-stack"),
+                project_root=project_root,
+                runtime_context="cli",
+                scope="workspace",
             )
 
         self.assertEqual(paths.subscriptions_file, project_root / "config" / "subscriptions.json")
@@ -64,6 +79,12 @@ class SubscriptionPathTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "Unknown subscription runtime context"):
             resolve_subscription_paths(FakeConfig(), runtime_context="worker")
+
+    def test_unknown_scope_fails_fast(self):
+        from subscription_paths import resolve_subscription_paths
+
+        with self.assertRaisesRegex(ValueError, "Unknown subscription scope"):
+            resolve_subscription_paths(FakeConfig(), scope="elsewhere")
 
 
 if __name__ == "__main__":

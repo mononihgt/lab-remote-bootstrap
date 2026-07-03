@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 import click
 from config import Config, ConfigError, load_config
-from subscription_paths import resolve_subscription_paths
 from utils import print_error, print_success, print_info
 
 
@@ -248,6 +247,45 @@ def build_subscriptions_content(subscription_url: str, template: str) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
+def subscription_scope_option(func):
+    """Add the subscription storage scope option to a command."""
+    return click.option(
+        '--scope',
+        type=click.Choice(['live', 'workspace']),
+        default='live',
+        show_default=True,
+        help='Subscription storage scope: live target config or workspace files',
+    )(func)
+
+
+def restart_clash_service(config) -> bool:
+    """Restart Clash on the live deployment target."""
+    cmd = "sudo systemctl restart lab-clash.service"
+
+    if config.is_remote_deployment:
+        host = config.get('target.host', config.get('cloud.host'))
+        user = config.get('target.user', config.get('cloud.user'))
+        identity_file = config.get(
+            'target.ssh_identity_file',
+            config.get('deployment.ssh_identity_file')
+        )
+        port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
+
+        from utils import run_ssh_command
+
+        returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
+    else:
+        result = subprocess.run(cmd.split(), check=False, capture_output=True, text=True)
+        returncode, stderr = result.returncode, result.stderr
+
+    if returncode != 0:
+        print_error(f"Failed to restart Clash service: {stderr}")
+        return False
+
+    print_success("Clash service restarted")
+    return True
+
+
 @click.group()
 @click.option('-c', '--config', 'config_path', help='Path to config file')
 @click.option('-v', '--verbose', is_flag=True, help='Verbose output')
@@ -379,6 +417,7 @@ docker:
             subscriptions_file = project_root / "config" / "subscriptions.json"
             subscriptions_file.write_text(subscriptions_content)
             print_success(f"Initial VPN subscription saved to {subscriptions_file}")
+            print_info("Initial VPN subscription is stored in workspace scope.")
 
     else:
         # Non-interactive: copy example
@@ -394,6 +433,8 @@ docker:
     print_info(f"\nNext steps:")
     print_info(f"  1. Edit {target_config} to customize your setup")
     print_info(f"  2. Run 'lab-remote-ctl deploy' to deploy")
+    if interactive and subscription_url:
+        print_info("  3. Run 'lab-remote-ctl subscription update Default' to apply the initial subscription to the live target")
 
 
 @cli.command()
@@ -451,8 +492,9 @@ def subscription():
 @click.argument('name')
 @click.argument('url')
 @click.option('--template', default='balanced', help='Conversion template')
+@subscription_scope_option
 @click.pass_context
-def subscription_add(ctx, name, url, template):
+def subscription_add(ctx, name, url, template, scope):
     """Add a new subscription."""
     try:
         config = load_config(ctx.obj.get('config_path'))
@@ -461,24 +503,30 @@ def subscription_add(ctx, name, url, template):
         sys.exit(1)
 
     from subscription import Subscription
+    from subscription_store import SubscriptionStore
 
-    paths = resolve_subscription_paths(config)
-
+    store = SubscriptionStore(config, scope=scope)
     try:
-        sub_manager = Subscription(str(paths.subscriptions_file))
-        sub = sub_manager.add(name, url, template)
+        store.prepare()
+        sub_manager = Subscription(str(store.local_paths.subscriptions_file))
+        sub_manager.add(name, url, template)
+        store.sync(upload_config=False)
         print_success(f"Added subscription: {name}")
         print_info(f"  URL: {url}")
         print_info(f"  Template: {template}")
-        print_info(f"\nRun 'lab-remote-ctl subscription update {name}' to download and activate")
+        scope_arg = "" if scope == "live" else " --scope workspace"
+        print_info(f"\nRun 'lab-remote-ctl subscription update {name}{scope_arg}' to download and activate")
     except Exception as e:
         print_error(f"Failed to add subscription: {e}")
         sys.exit(1)
+    finally:
+        store.cleanup()
 
 
 @subscription.command('list')
+@subscription_scope_option
 @click.pass_context
-def subscription_list(ctx):
+def subscription_list(ctx, scope):
     """List all subscriptions."""
     try:
         config = load_config(ctx.obj.get('config_path'))
@@ -487,11 +535,12 @@ def subscription_list(ctx):
         sys.exit(1)
 
     from subscription import Subscription
+    from subscription_store import SubscriptionStore
 
-    paths = resolve_subscription_paths(config)
-
+    store = SubscriptionStore(config, scope=scope)
     try:
-        sub_manager = Subscription(str(paths.subscriptions_file))
+        store.prepare()
+        sub_manager = Subscription(str(store.local_paths.subscriptions_file))
         subs = sub_manager.list()
 
         if not subs:
@@ -500,7 +549,7 @@ def subscription_list(ctx):
             return
 
         active = sub_manager.data.get('active')
-        click.echo("\n📡 Subscriptions:\n")
+        click.echo(f"\n📡 Subscriptions ({scope}):\n")
 
         for sub in subs:
             status_marker = "✓" if sub['name'] == active else "○"
@@ -518,12 +567,15 @@ def subscription_list(ctx):
     except Exception as e:
         print_error(f"Failed to list subscriptions: {e}")
         sys.exit(1)
+    finally:
+        store.cleanup()
 
 
 @subscription.command('activate')
 @click.argument('name')
+@subscription_scope_option
 @click.pass_context
-def subscription_activate(ctx, name):
+def subscription_activate(ctx, name, scope):
     """Activate a subscription."""
     try:
         config = load_config(ctx.obj.get('config_path'))
@@ -532,23 +584,29 @@ def subscription_activate(ctx, name):
         sys.exit(1)
 
     from subscription import Subscription
+    from subscription_store import SubscriptionStore
 
-    paths = resolve_subscription_paths(config)
-
+    store = SubscriptionStore(config, scope=scope)
     try:
-        sub_manager = Subscription(str(paths.subscriptions_file))
+        store.prepare()
+        sub_manager = Subscription(str(store.local_paths.subscriptions_file))
         sub_manager.activate(name)
+        store.sync(upload_config=False)
         print_success(f"Activated subscription: {name}")
-        print_info("Restart Clash service to apply changes")
+        scope_arg = "" if scope == "live" else " --scope workspace"
+        print_info(f"Run 'lab-remote-ctl subscription update {name}{scope_arg}' to regenerate Clash config")
     except Exception as e:
         print_error(f"Failed to activate subscription: {e}")
         sys.exit(1)
+    finally:
+        store.cleanup()
 
 
 @subscription.command('update')
 @click.argument('name')
+@subscription_scope_option
 @click.pass_context
-def subscription_update(ctx, name):
+def subscription_update(ctx, name, scope):
     """Update a subscription."""
     try:
         config = load_config(ctx.obj.get('config_path'))
@@ -558,33 +616,43 @@ def subscription_update(ctx, name):
 
     from subscription import Subscription
     from utils import get_project_root
+    from subscription_store import SubscriptionStore
 
-    paths = resolve_subscription_paths(config)
+    store = SubscriptionStore(config, scope=scope)
 
     project_root = get_project_root()
     template_dir = str(project_root / "assets" / "clash" / "templates")
 
     try:
-        sub_manager = Subscription(str(paths.subscriptions_file))
+        store.prepare()
+        sub_manager = Subscription(str(store.local_paths.subscriptions_file))
         print_info(f"Updating subscription: {name}")
 
-        sub_type, node_count = sub_manager.update(name, template_dir, str(paths.config_file))
+        sub_type, node_count = sub_manager.update(name, template_dir, str(store.local_paths.config_file))
+        store.sync(upload_config=True)
 
         print_success(f"Subscription updated: {name}")
         print_info(f"  Type: {sub_type}")
         print_info(f"  Nodes: {node_count}")
-        print_info(f"  Config: {paths.config_file}")
-        print_info("\nRestart Clash service to apply changes")
+        print_info(f"  Config: {store.remote_paths.config_file if scope == 'live' else store.local_paths.config_file}")
+        if scope == "live":
+            if not restart_clash_service(config):
+                sys.exit(1)
+        else:
+            print_info("\nRun 'lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web' to publish workspace changes")
 
     except Exception as e:
         print_error(f"Failed to update subscription: {e}")
         sys.exit(1)
+    finally:
+        store.cleanup()
 
 
 @subscription.command('remove')
 @click.argument('name')
+@subscription_scope_option
 @click.pass_context
-def subscription_remove(ctx, name):
+def subscription_remove(ctx, name, scope):
     """Remove a subscription."""
     try:
         config = load_config(ctx.obj.get('config_path'))
@@ -594,19 +662,24 @@ def subscription_remove(ctx, name):
 
     from subscription import Subscription
 
-    paths = resolve_subscription_paths(config)
-
     if not click.confirm(f"Remove subscription '{name}'?"):
         print_info("Cancelled")
         return
 
+    from subscription_store import SubscriptionStore
+
+    store = SubscriptionStore(config, scope=scope)
     try:
-        sub_manager = Subscription(str(paths.subscriptions_file))
+        store.prepare()
+        sub_manager = Subscription(str(store.local_paths.subscriptions_file))
         sub_manager.remove(name)
+        store.sync(upload_config=False)
         print_success(f"Removed subscription: {name}")
     except Exception as e:
         print_error(f"Failed to remove subscription: {e}")
         sys.exit(1)
+    finally:
+        store.cleanup()
 
 
 @cli.command()

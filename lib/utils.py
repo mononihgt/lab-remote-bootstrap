@@ -139,6 +139,59 @@ def upload_file(
     return returncode == 0
 
 
+def download_file(
+    remote_path: str,
+    local_path: str,
+    host: str,
+    user: str,
+    identity_file: Optional[str] = None,
+    port: int = 22,
+    local: bool = False,
+) -> bool:
+    """
+    Download file from remote host via SCP, or copy locally if local=True.
+
+    Args:
+        remote_path: Remote file path
+        local_path: Local file path
+        host: Remote hostname
+        user: SSH user
+        identity_file: Path to SSH private key
+        port: SSH port
+        local: If True, copy file locally instead of via SCP
+
+    Returns:
+        True if successful
+    """
+    if local:
+        import shutil
+        try:
+            Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(remote_path, local_path)
+            return True
+        except Exception as e:
+            print_error(f"Failed to copy file: {e}")
+            return False
+
+    Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+
+    scp_cmd = ["scp"]
+
+    if identity_file:
+        identity_file = os.path.expanduser(identity_file)
+        scp_cmd.extend(["-i", identity_file])
+
+    scp_cmd.extend([
+        "-P", str(port),
+        "-o", "StrictHostKeyChecking=accept-new",
+        f"{user}@{host}:{remote_path}",
+        local_path,
+    ])
+
+    returncode, _, _ = run_command(scp_cmd, check=False, capture_output=True)
+    return returncode == 0
+
+
 def expand_path(path: str) -> Path:
     """
     Expand user home and resolve path.

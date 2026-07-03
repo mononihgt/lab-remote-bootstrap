@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -32,6 +33,53 @@ class SubscriptionDownloadTests(unittest.TestCase):
             },
         )
         response.raise_for_status.assert_called_once_with()
+
+    def test_update_marks_subscription_active(self):
+        from subscription import Subscription
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_file = Path(tempdir) / "subscriptions.json"
+            output_file = Path(tempdir) / "config.yaml"
+            state_file.write_text(
+                """
+{
+  "version": "1.0",
+  "active": "Default",
+  "subscriptions": [
+    {
+      "name": "Default",
+      "url": "https://example.com/default",
+      "type": null,
+      "template": "balanced",
+      "added_at": "2026-01-01T00:00:00Z",
+      "last_update": null,
+      "node_count": 0,
+      "status": "active"
+    },
+    {
+      "name": "ikuuu",
+      "url": "https://example.com/ikuuu",
+      "type": null,
+      "template": "balanced",
+      "added_at": "2026-01-01T00:00:00Z",
+      "last_update": null,
+      "node_count": 0,
+      "status": "inactive"
+    }
+  ]
+}
+"""
+            )
+            subscription = Subscription(str(state_file))
+            yaml_content = "proxies:\n  - name: node-a\n    type: direct\n"
+
+            with patch.object(subscription, "_download", return_value=yaml_content):
+                subscription.update("ikuuu", str(Path(tempdir)), str(output_file))
+
+            updated = Subscription(str(state_file))
+            self.assertEqual(updated.data["active"], "ikuuu")
+            self.assertEqual(updated.get("Default")["status"], "inactive")
+            self.assertEqual(updated.get("ikuuu")["status"], "active")
 
 
 if __name__ == "__main__":

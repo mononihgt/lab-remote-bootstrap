@@ -65,7 +65,7 @@ class InitConfigGenerationTests(unittest.TestCase):
 
         self.assertIsNone(cli.build_subscriptions_content("", "balanced"))
 
-    def test_remote_subscription_paths_use_project_config_directory(self):
+    def test_default_subscription_paths_use_live_install_root(self):
         cli = load_cli_module()
         from subscription_paths import resolve_subscription_paths
 
@@ -76,6 +76,21 @@ class InitConfigGenerationTests(unittest.TestCase):
                 return default
 
         paths = resolve_subscription_paths(Config())
+
+        self.assertEqual(paths.subscriptions_file, Path("/opt/lab-remote-stack/clash/subscriptions.json"))
+        self.assertEqual(paths.config_file, Path("/opt/lab-remote-stack/clash/config.yaml"))
+
+    def test_workspace_subscription_paths_use_project_config_directory(self):
+        cli = load_cli_module()
+        from subscription_paths import resolve_subscription_paths
+
+        class Config:
+            is_remote_deployment = True
+
+            def get(self, key_path, default=None):
+                return default
+
+        paths = resolve_subscription_paths(Config(), scope="workspace")
 
         self.assertEqual(paths.subscriptions_file, PROJECT_ROOT / "config" / "subscriptions.json")
         self.assertEqual(paths.config_file, PROJECT_ROOT / "config" / "clash.generated.yaml")

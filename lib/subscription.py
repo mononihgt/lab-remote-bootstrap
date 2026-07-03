@@ -176,6 +176,9 @@ class Subscription:
         # Update subscription info
         sub['last_update'] = datetime.utcnow().isoformat() + "Z"
         sub['node_count'] = node_count
+        for candidate in self.data['subscriptions']:
+            candidate['status'] = 'active' if candidate['name'] == name else 'inactive'
+        self.data['active'] = name
         self._save_subscriptions()
 
         return sub_type, node_count

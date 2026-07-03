@@ -232,19 +232,47 @@ ssh -p 2223 <lab_user>@<cloud_host>
 
 #### 4. 管理订阅
 
+订阅命令默认操作 `live` scope，也就是当前部署目标正在使用的服务器配置：
+
+- `deployment.target: remote`：通过 `target.*` SSH 配置操作实验室服务器上的 live 文件。
+- `deployment.target: local`：直接操作当前机器上的 live 文件，适合在实验室服务器本机执行 CLI。
+
+live 文件默认位于：
+
+```text
+/opt/lab-remote-stack/clash/subscriptions.json
+/opt/lab-remote-stack/clash/config.yaml
+```
+
+如果只想修改当前 repo 工作区里的待发布文件，使用 `--scope workspace`：
+
+```text
+config/subscriptions.json
+config/clash.generated.yaml
+```
+
 ```bash
-# 添加订阅
+# 添加订阅到 live 目标
 ./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription
 
-# 更新订阅（下载并生成配置）
+# 更新订阅、设为 active、生成 Clash 配置并重启 live 目标上的 Clash
 ./cli/lab-remote-ctl subscription update "主力节点"
 
-# 查看所有订阅
+# 查看 live 目标上的订阅
 ./cli/lab-remote-ctl subscription list
 
-# 激活订阅
+# 只查看 workspace 文件
+./cli/lab-remote-ctl subscription list --scope workspace
+
+# 只更新 workspace，稍后再通过 deploy 发布
+./cli/lab-remote-ctl subscription update "主力节点" --scope workspace
+./cli/lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web
+
+# 标记订阅为 active；要重新生成 Clash 配置仍需 update
 ./cli/lab-remote-ctl subscription activate "主力节点"
 ```
+
+`init --interactive` 中填写的初始 VPN 订阅只会写入 workspace。完成首次部署后，运行 `lab-remote-ctl subscription update Default` 才会把该订阅下载、生成配置并应用到 live 目标。
 
 #### 5. 健康检查
 
