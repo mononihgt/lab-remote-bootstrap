@@ -386,6 +386,10 @@ else
   alias l='ls -CF'
 fi
 
+if [[ -o interactive ]] && command -v fastfetch >/dev/null 2>&1; then
+  fastfetch
+fi
+
 if [[ -r /opt/lab-zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
   export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
   source /opt/lab-zsh/themes/powerlevel10k/powerlevel10k.zsh-theme
@@ -395,10 +399,6 @@ else
 fi
 
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
-
-if [[ -o interactive ]] && command -v fastfetch >/dev/null 2>&1; then
-  fastfetch
-fi
 ZSHRC
   chmod 644 "${target_home}/.zshrc"
 }

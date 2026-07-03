@@ -308,13 +308,6 @@ if command -v tldr >/dev/null 2>&1; then
     alias help='tldr'
 fi
 
-# powerlevel10k
-if [[ -r $HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
-  export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
-  source $HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme
-  [[ -f $HOME/.p10k.zsh ]] && source $HOME/.p10k.zsh
-fi
-
 # fastfetch
 if [[ -o interactive ]] && command -v fastfetch >/dev/null 2>&1; then
     if [[ $COLUMNS -ge 110 ]]; then
@@ -322,6 +315,13 @@ if [[ -o interactive ]] && command -v fastfetch >/dev/null 2>&1; then
     else
         fastfetch --logo-position top --disable-linewrap false
     fi
+fi
+
+# powerlevel10k
+if [[ -r $HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
+  export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
+  source $HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme
+  [[ -f $HOME/.p10k.zsh ]] && source $HOME/.p10k.zsh
 fi
 
 # Local customizations

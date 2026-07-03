@@ -27,6 +27,17 @@ class FakeConfig:
 
 
 class ZshModuleTests(unittest.TestCase):
+    def test_generated_config_runs_fastfetch_before_powerlevel10k(self):
+        from modules.zsh_module import ZshModule
+
+        module = ZshModule(FakeConfig())
+        config_block = module._generate_config_block()
+
+        fastfetch_index = config_block.index("# fastfetch")
+        powerlevel_index = config_block.index("# powerlevel10k")
+
+        self.assertLess(fastfetch_index, powerlevel_index)
+
     def test_write_config_writes_managed_block_to_home_zshrc(self):
         from modules.zsh_module import ZshModule
 

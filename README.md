@@ -207,6 +207,11 @@ autossh:
 ./cli/lab-remote-ctl deploy --dry-run   # 预览部署计划
 ```
 
+重新部署 Clash 时，CLI 会先将新的内核上传到临时路径，再原子替换
+`/opt/lab-remote-stack/clash/clash` 并重启 `lab-clash.service`。这避免了
+直接覆盖正在运行的 Clash 可执行文件时出现上传失败，也确保新的订阅配置、
+模板和端口设置会在本次部署中生效。
+
 部署完成后，AutoSSH 会建立反向隧道，你可以通过云服务器连接到实验室服务器：
 ```bash
 # 从任何地方通过云服务器连接实验室服务器
@@ -483,7 +488,7 @@ bash docker/setup_docker_stack.sh docker/docker-stack.env
 - 容器内 SSH 服务
 - AutoSSH 反向隧道
 - Clash 启动与端口注入
-- Zsh 环境增强（补全、历史搜索、autosuggestions、syntax-highlighting、powerlevel10k、fastfetch、fzf、zoxide、eza）
+- Zsh 环境增强（补全、历史搜索、autosuggestions、syntax-highlighting、powerlevel10k、fastfetch、fzf、zoxide、eza）。生成的 `.zshrc` 会先运行 fastfetch，再加载 powerlevel10k，避免启动横幅触发 powerlevel10k 的 console output warning。
 
 ---
 
@@ -516,7 +521,7 @@ bash host/setup_host_stack.sh host/host-stack.env
   - `lab-clash.service`
   - `lab-autossh.service`
 - `.zshrc` 注入代理环境变量
-- Zsh 环境增强（补全、历史搜索、autosuggestions、syntax-highlighting、powerlevel10k、fastfetch、fzf、zoxide、eza）
+- Zsh 环境增强（补全、历史搜索、autosuggestions、syntax-highlighting、powerlevel10k、fastfetch、fzf、zoxide、eza）。生成的 `.zshrc` 会先运行 fastfetch，再加载 powerlevel10k，避免启动横幅触发 powerlevel10k 的 console output warning。
 
 ---
 

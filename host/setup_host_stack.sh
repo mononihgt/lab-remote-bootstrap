@@ -360,6 +360,10 @@ else
   alias l='ls -CF'
 fi
 
+if [[ -o interactive ]] && command -v fastfetch >/dev/null 2>&1; then
+  fastfetch
+fi
+
 if [[ -r \$HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
   export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
   source \$HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme
@@ -367,10 +371,6 @@ if [[ -r \$HOME/.zsh/themes/powerlevel10k/powerlevel10k.zsh-theme ]]; then
 fi
 
 [[ -f \$HOME/.zshrc.local ]] && source \$HOME/.zshrc.local
-
-if [[ -o interactive ]] && command -v fastfetch >/dev/null 2>&1; then
-  fastfetch
-fi
 ${end_marker}
 BLOCK
 )

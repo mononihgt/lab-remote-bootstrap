@@ -156,13 +156,17 @@ sudo chown -R {user}:{user} {install_root}
 
             # Upload
             remote_path = f"{install_root}/clash/clash"
-            if not upload_file(str(clash_binary), remote_path, host, user, identity_file, port):
+            remote_upload_path = f"{remote_path}.upload"
+            if not upload_file(str(clash_binary), remote_upload_path, host, user, identity_file, port):
                 print_error("Failed to upload Clash binary")
                 return False
 
-            # Make executable
-            cmd = f"chmod +x {install_root}/clash/clash"
-            run_ssh_command(host, user, cmd, identity_file, port)
+            # Promote after upload so redeploys do not truncate a running executable.
+            cmd = f"mv -f {remote_upload_path} {remote_path} && chmod +x {remote_path}"
+            returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
+            if returncode != 0:
+                print_error(f"Failed to install Clash binary: {stderr}")
+                return False
 
         print_success("Clash binary ready")
         return True
@@ -307,7 +311,7 @@ sudo systemctl enable lab-clash.service
         """Start Clash service."""
         print_info("Starting Clash service...")
 
-        cmd = "sudo systemctl start lab-clash.service"
+        cmd = "sudo systemctl restart lab-clash.service"
         returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
         if returncode != 0:
             print_error(f"Failed to start service: {stderr}")
