@@ -78,21 +78,6 @@ fi
         pkg_manager = stdout.strip()
         self.log(f"Detected package manager: {pkg_manager}")
 
-        # Define tools to install (best-effort)
-        tools = []
-        if pkg_manager == 'apt':
-            tools = ['fzf', 'fd-find', 'eza', 'bat', 'tldr', 'fastfetch']
-        elif pkg_manager in ['dnf', 'yum']:
-            tools = ['fzf', 'fd-find', 'eza', 'bat', 'tldr', 'fastfetch']
-        elif pkg_manager == 'pacman':
-            tools = ['fzf', 'fd', 'eza', 'bat', 'tldr', 'fastfetch']
-        elif pkg_manager == 'apk':
-            tools = ['fzf', 'fd', 'eza', 'bat', 'tldr-pages', 'fastfetch']
-        else:
-            print_info("Unknown package manager, skipping tool installation")
-            return True
-
-        # Install each tool (best-effort)
         install_cmds = {
             'apt': 'sudo apt-get install -y',
             'dnf': 'sudo dnf install -y',
@@ -104,9 +89,41 @@ fi
 
         install_cmd = install_cmds.get(pkg_manager)
         if not install_cmd:
-            return True
+            print_error("Unknown package manager, cannot install zsh")
+            return False
 
-        for tool in tools:
+        returncode, _, stderr = run_ssh_command(
+            host,
+            user,
+            f"{install_cmd} zsh",
+            identity_file,
+            port,
+        )
+        if returncode != 0:
+            print_error(f"Failed to install zsh: {stderr}")
+            return False
+
+        returncode, _, stderr = run_ssh_command(
+            host,
+            user,
+            "command -v zsh",
+            identity_file,
+            port,
+        )
+        if returncode != 0:
+            print_error(f"zsh was not found after installation: {stderr}")
+            return False
+
+        optional_tools = {
+            'apt': ['fzf', 'fd-find', 'eza', 'bat', 'tldr', 'fastfetch'],
+            'dnf': ['fzf', 'fd-find', 'eza', 'bat', 'tldr', 'fastfetch'],
+            'yum': ['fzf', 'fd-find', 'eza', 'bat', 'tldr', 'fastfetch'],
+            'pacman': ['fzf', 'fd', 'eza', 'bat', 'tldr', 'fastfetch'],
+            'zypper': ['fzf', 'fd', 'eza', 'bat', 'tldr', 'fastfetch'],
+            'apk': ['fzf', 'fd', 'eza', 'bat', 'tldr-pages', 'fastfetch'],
+        }
+
+        for tool in optional_tools[pkg_manager]:
             cmd = f"{install_cmd} {tool} 2>/dev/null || true"
             self.log(f"Installing {tool}")
             run_ssh_command(host, user, cmd, identity_file, port)

@@ -120,6 +120,15 @@ sudo chown -R {user}:{user} {install_root}/lib
                 return False
             self.log("Uploaded app.py")
 
+        requirements_file = project_root / "requirements.txt"
+        if not requirements_file.exists():
+            print_error(f"Requirements file missing: {requirements_file}")
+            return False
+        requirements_path = f"{install_root}/web/requirements.txt"
+        if not upload_file(str(requirements_file), requirements_path, host, user, identity_file, port):
+            print_error("Failed to upload requirements.txt")
+            return False
+
         if not self._upload_runtime_lib(host, user, identity_file, port, install_root):
             return False
 
@@ -183,18 +192,26 @@ sudo chown -R {user}:{user} {install_root}/lib
         """Install Python dependencies."""
         print_info("Installing Python dependencies...")
 
-        # Check if pip is available
-        cmd = "python3 -m pip --version >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y python3-pip)"
-        returncode, _, _ = run_ssh_command(host, user, cmd, identity_file, port)
-
-        # Install Flask and requests
+        venv_path = f"{install_root}/web/.venv"
+        venv_python = f"{venv_path}/bin/python"
+        requirements_path = f"{install_root}/web/requirements.txt"
         cmd = f"""
-python3 -m pip install --user --quiet flask requests pyyaml jsonschema || true
+set -e
+if command -v uv >/dev/null 2>&1; then
+    uv venv --allow-existing --python 3.12 {venv_path}
+    uv pip install --python {venv_python} -r {requirements_path}
+elif command -v python3.12 >/dev/null 2>&1; then
+    python3.12 -m venv {venv_path}
+    {venv_python} -m pip install --quiet -r {requirements_path}
+else
+    echo "Python 3.12 is required for the Web service. Install uv or python3.12." >&2
+    exit 1
+fi
 """
         returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
         if returncode != 0:
-            print_warning(f"Failed to install some dependencies: {stderr}")
-            print_info("Web interface may not work properly")
+            print_error(f"Failed to install Web dependencies: {stderr}")
+            return False
 
         print_success("Dependencies installed")
         return True
@@ -205,6 +222,7 @@ python3 -m pip install --user --quiet flask requests pyyaml jsonschema || true
 
         web_host = self.config.get('web.bind', '127.0.0.1')
         web_port = self.config.get('web.port', 5000)
+        venv_python = f"{install_root}/web/.venv/bin/python"
 
         service_content = f"""[Unit]
 Description=Lab Remote Bootstrap Web Interface
@@ -215,7 +233,7 @@ Type=simple
 User={user}
 WorkingDirectory={install_root}/web
 Environment="PYTHONPATH={install_root}"
-ExecStart=/usr/bin/python3 {install_root}/web/app.py
+ExecStart={venv_python} {install_root}/web/app.py
 Restart=on-failure
 RestartSec=5s
 

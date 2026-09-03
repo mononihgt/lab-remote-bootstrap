@@ -35,6 +35,7 @@ class WebModuleTests(unittest.TestCase):
             web_dir.mkdir()
             lib_dir.mkdir()
             (web_dir / "app.py").write_text("print('web')\n")
+            (root / "requirements.txt").write_text("Flask==3.0.0\n")
             for name in ["config.py", "subscription.py", "subscription_paths.py", "health.py", "utils.py"]:
                 (lib_dir / name).write_text(f"# {name}\n")
 
@@ -50,6 +51,7 @@ class WebModuleTests(unittest.TestCase):
                 [call.args[1] for call in upload.call_args_list],
                 [
                     "/opt/lab-remote-stack/web/app.py",
+                    "/opt/lab-remote-stack/web/requirements.txt",
                     "/opt/lab-remote-stack/lib/config.py",
                     "/opt/lab-remote-stack/lib/subscription.py",
                     "/opt/lab-remote-stack/lib/subscription_paths.py",
@@ -57,6 +59,54 @@ class WebModuleTests(unittest.TestCase):
                     "/opt/lab-remote-stack/lib/utils.py",
                 ],
             )
+
+    def test_dependencies_use_persistent_uv_python312_venv(self):
+        from modules.web_module import WebModule
+
+        module = WebModule(FakeConfig())
+
+        with patch("modules.web_module.run_ssh_command", return_value=(0, "", "")) as run_ssh_command:
+            self.assertTrue(
+                module._install_dependencies("host", "user", "id", 2222, "/opt/lab-remote-stack")
+            )
+
+        command = run_ssh_command.call_args.args[2]
+        self.assertIn(
+            "uv venv --allow-existing --python 3.12 /opt/lab-remote-stack/web/.venv",
+            command,
+        )
+        self.assertIn(
+            "uv pip install --python /opt/lab-remote-stack/web/.venv/bin/python",
+            command,
+        )
+        self.assertIn("-r /opt/lab-remote-stack/web/requirements.txt", command)
+        self.assertNotIn("|| true", command)
+
+    def test_dependency_install_failure_stops_web_deployment(self):
+        from modules.web_module import WebModule
+
+        module = WebModule(FakeConfig())
+
+        with patch("modules.web_module.run_ssh_command", return_value=(1, "", "uv failed")):
+            self.assertFalse(
+                module._install_dependencies("host", "user", "id", 2222, "/opt/lab-remote-stack")
+            )
+
+    def test_systemd_service_uses_web_venv_python(self):
+        from modules.web_module import WebModule
+
+        module = WebModule(FakeConfig())
+
+        with patch("modules.web_module.run_ssh_command", return_value=(0, "", "")) as run_ssh_command:
+            self.assertTrue(
+                module._create_systemd_service("host", "user", "id", 2222, "/opt/lab-remote-stack")
+            )
+
+        command = run_ssh_command.call_args.args[2]
+        self.assertIn(
+            "ExecStart=/opt/lab-remote-stack/web/.venv/bin/python /opt/lab-remote-stack/web/app.py",
+            command,
+        )
 
     def test_start_service_fails_when_systemd_service_is_not_active(self):
         from modules.web_module import WebModule

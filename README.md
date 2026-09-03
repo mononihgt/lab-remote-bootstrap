@@ -67,6 +67,8 @@ ssh <cloud_user>@<cloud_host>
 - sudo 权限
 - 可以通过 SSH 从本地连接
 - **具备到云服务器的 SSH 密钥认证**（用于 AutoSSH 反向隧道）
+- Web 服务需要 `uv` 或 `python3.12`；部署会创建
+  `/opt/lab-remote-stack/web/.venv` 并由 systemd 使用该独立环境运行
 
 生成并配置 SSH 密钥：
 ```bash
@@ -140,6 +142,9 @@ python -m pip install -r requirements.txt
 
 本地部署会在预检阶段通过 `sudo -v` 交互式请求一次当前用户密码，后续
 Clash、AutoSSH、Web 和系统服务操作复用 sudo 凭据缓存；请从终端运行命令。
+部署 Web 时，若系统 `python3` 低于 3.8（例如 Ubuntu 18.04 的 Python 3.6），
+请确保运行部署命令的用户能执行 `uv` 或 `python3.12`。Web 服务会使用部署时
+创建的 `/opt/lab-remote-stack/web/.venv/bin/python`，而不是系统 Python。
 
 首次部署完成后，AutoSSH 会建立到云服务器的反向隧道，之后就可以从任何地方通过云服务器访问实验室服务器了：
 

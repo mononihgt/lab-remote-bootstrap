@@ -27,6 +27,42 @@ class FakeConfig:
 
 
 class ZshModuleTests(unittest.TestCase):
+    def test_install_tools_installs_and_verifies_zsh_before_optional_tools(self):
+        from modules.zsh_module import ZshModule
+
+        module = ZshModule(FakeConfig())
+
+        def run_ssh(_host, _user, cmd, _identity_file, _port):
+            if "then echo apt" in cmd:
+                return 0, "apt\n", ""
+            if cmd == "command -v zsh":
+                return 0, "/usr/bin/zsh\n", ""
+            return 0, "", ""
+
+        with patch("modules.zsh_module.run_ssh_command", side_effect=run_ssh) as run_ssh_command:
+            self.assertTrue(module._install_tools("host", "user", None, 22))
+
+        commands = [call.args[2] for call in run_ssh_command.call_args_list]
+        required_install = "sudo apt-get install -y zsh"
+        self.assertIn(required_install, commands)
+        self.assertIn("command -v zsh", commands)
+        self.assertLess(commands.index(required_install), commands.index("command -v zsh"))
+
+    def test_install_tools_fails_when_zsh_is_unavailable(self):
+        from modules.zsh_module import ZshModule
+
+        module = ZshModule(FakeConfig())
+
+        def run_ssh(_host, _user, cmd, _identity_file, _port):
+            if "then echo apt" in cmd:
+                return 0, "apt\n", ""
+            if cmd == "command -v zsh":
+                return 1, "", "zsh not found"
+            return 0, "", ""
+
+        with patch("modules.zsh_module.run_ssh_command", side_effect=run_ssh):
+            self.assertFalse(module._install_tools("host", "user", None, 22))
+
     def test_generated_config_runs_fastfetch_before_powerlevel10k(self):
         from modules.zsh_module import ZshModule
 
