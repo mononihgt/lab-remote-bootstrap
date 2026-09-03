@@ -1,11 +1,41 @@
 #!/usr/bin/env python3
 """Utility functions for lab-remote-bootstrap."""
 
+import getpass
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+MIN_SUPPORTED_PYTHON = (3, 8)
+
+
+def check_python_version(version_info=None) -> Tuple[bool, str]:
+    """Return whether the running interpreter meets project requirements."""
+    version_info = version_info or sys.version_info
+    if isinstance(version_info, tuple):
+        major, minor = version_info[:2]
+        micro = version_info[2] if len(version_info) > 2 else 0
+    else:
+        major = version_info.major
+        minor = version_info.minor
+        micro = getattr(version_info, 'micro', 0)
+    current = f"{major}.{minor}.{micro}"
+    minimum = ".".join(str(part) for part in MIN_SUPPORTED_PYTHON)
+    if (major, minor) < MIN_SUPPORTED_PYTHON:
+        return (
+            False,
+            f"Python {current} is not supported; Python {minimum}+ is required. "
+            f"Use the intended interpreter explicitly, for example: "
+            f"python3.12 -m pip install -r requirements.txt",
+        )
+    return True, current
+
+
+def is_local_endpoint(host: str, user: str) -> bool:
+    """Return whether legacy transport parameters identify this local user."""
+    return host in {"localhost", "127.0.0.1", "::1"} and user == getpass.getuser()
 
 
 def run_command(
@@ -50,7 +80,7 @@ def run_ssh_command(
     cmd: str,
     identity_file: Optional[str] = None,
     port: int = 22,
-    local: bool = False,
+    local: Optional[bool] = None,
 ) -> Tuple[int, str, str]:
     """
     Run command on remote host via SSH, or locally if local=True.
@@ -66,6 +96,11 @@ def run_ssh_command(
     Returns:
         Tuple of (returncode, stdout, stderr)
     """
+    # Local deployments use the canonical localhost parameters returned by
+    # BaseModule. Infer that transport when callers use the legacy signature.
+    if local is None:
+        local = is_local_endpoint(host, user)
+
     if local:
         # Run command locally using bash
         return run_command(["bash", "-c", cmd], check=False, capture_output=True)
@@ -94,7 +129,7 @@ def upload_file(
     user: str,
     identity_file: Optional[str] = None,
     port: int = 22,
-    local: bool = False,
+    local: Optional[bool] = None,
 ) -> bool:
     """
     Upload file to remote host via SCP, or copy locally if local=True.
@@ -111,6 +146,9 @@ def upload_file(
     Returns:
         True if successful
     """
+    if local is None:
+        local = is_local_endpoint(host, user)
+
     if local:
         # Copy file locally
         import shutil
@@ -146,7 +184,7 @@ def download_file(
     user: str,
     identity_file: Optional[str] = None,
     port: int = 22,
-    local: bool = False,
+    local: Optional[bool] = None,
 ) -> bool:
     """
     Download file from remote host via SCP, or copy locally if local=True.
@@ -163,6 +201,9 @@ def download_file(
     Returns:
         True if successful
     """
+    if local is None:
+        local = is_local_endpoint(host, user)
+
     if local:
         import shutil
         try:

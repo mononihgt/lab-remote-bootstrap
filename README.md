@@ -36,7 +36,7 @@
 
 #### 1. 本地环境（运行 lab-remote-ctl 的机器）
 
-- Python 3.7+ 已安装
+- Python 3.8+ 已安装（推荐 Python 3.12）
 - 可以通过 SSH 连接到云服务器和实验室服务器
 - 远程部署时，`target.ssh_identity_file` 是**本地机器上**用于连接实验室服务器的私钥；如果留空，则使用 `~/.ssh/config` 或 ssh-agent
 
@@ -96,8 +96,12 @@ ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 ### 安装依赖
 
 ```bash
-# 在本地机器上安装 Python 依赖
-pip3 install -r requirements.txt
+# 使用运行 lab-remote-ctl 的同一个 Python 解释器安装依赖
+python --version
+python -m pip --version
+python -m pip install -r requirements.txt
+# 如果环境中的 python 仍指向旧版本，请显式使用：
+# python3.12 -m pip install -r requirements.txt
 ```
 
 ### 方式 1：全新部署（首次部署 - 在实验室服务器上操作）
@@ -111,7 +115,7 @@ pip3 install -r requirements.txt
 # 方式 B: 如果服务器可以访问 GitHub
 git clone https://github.com/mononihgt/lab-remote-bootstrap.git
 cd lab-remote-bootstrap
-pip3 install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 #### 2. 在服务器上初始化配置
@@ -359,7 +363,7 @@ lab-remote-ctl
 
 ```
 ┌─────────────┐
-│  本地 PC    │  1. 安装依赖: pip3 install -r requirements.txt
+│  本地 PC    │  1. 安装依赖: python -m pip install -r requirements.txt
 │             │  2. 初始化配置: ./cli/lab-remote-ctl init --interactive
 └──────┬──────┘  3. 部署: ./cli/lab-remote-ctl deploy
        │         4. 管理订阅: init 时填写 URL 或 subscription add/update

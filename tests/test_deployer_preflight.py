@@ -127,9 +127,20 @@ class DeployerPreflightTests(unittest.TestCase):
         deployer = Deployer(config)
 
         with patch("deployer.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess(["sudo", "-v"], 0)
             self.assertTrue(deployer._validate_remote_sudo())
 
-        run.assert_not_called()
+        run.assert_called_once_with(["sudo", "-v"], check=False)
+
+    def test_local_validation_reports_sudo_failure(self):
+        from deployer import Deployer
+
+        config = FakeConfig({"deployment": {"target": "local"}})
+        deployer = Deployer(config)
+
+        with patch("deployer.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess(["sudo", "-v"], 1)
+            self.assertFalse(deployer._validate_remote_sudo())
 
     def test_remote_validation_rejects_autossh_redeploy_through_same_reverse_port(self):
         from deployer import Deployer

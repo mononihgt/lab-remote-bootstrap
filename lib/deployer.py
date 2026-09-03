@@ -3,6 +3,7 @@
 
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -259,9 +260,21 @@ class Deployer:
         return port
 
     def _validate_remote_sudo(self) -> bool:
-        """Validate non-interactive sudo for remote deployments."""
+        """Validate sudo access on the deployment target."""
         if self.config.is_local_deployment:
-            return True
+            if hasattr(os, "geteuid") and os.geteuid() == 0:
+                return True
+            print_info("Checking local sudo access (enter your password if prompted)...")
+            try:
+                result = subprocess.run(["sudo", "-v"], check=False)
+            except OSError as exc:
+                print_error(f"Unable to run sudo -v: {exc}")
+                return False
+            if result.returncode == 0:
+                return True
+            print_error("Local sudo authentication failed")
+            print_info("Verify that your account has sudo access and run deploy from a terminal.")
+            return False
 
         host, user, identity_file, port = self._get_remote_target_params()
         self._cleanup_target_known_hosts(host, port)
