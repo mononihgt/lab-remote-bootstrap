@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Utility functions for lab-remote-bootstrap."""
 
-import getpass
 import os
 import subprocess
 import sys
@@ -31,11 +30,6 @@ def check_python_version(version_info=None) -> Tuple[bool, str]:
             f"python3.12 -m pip install -r requirements.txt",
         )
     return True, current
-
-
-def is_local_endpoint(host: str, user: str) -> bool:
-    """Return whether legacy transport parameters identify this local user."""
-    return host in {"localhost", "127.0.0.1", "::1"} and user == getpass.getuser()
 
 
 def run_command(
@@ -80,10 +74,9 @@ def run_ssh_command(
     cmd: str,
     identity_file: Optional[str] = None,
     port: int = 22,
-    local: Optional[bool] = None,
 ) -> Tuple[int, str, str]:
     """
-    Run command on remote host via SSH, or locally if local=True.
+    Run command on a remote host via SSH.
 
     Args:
         host: Remote hostname
@@ -91,20 +84,9 @@ def run_ssh_command(
         cmd: Command to execute
         identity_file: Path to SSH private key
         port: SSH port
-        local: If True, run command locally instead of via SSH
-
     Returns:
         Tuple of (returncode, stdout, stderr)
     """
-    # Local deployments use the canonical localhost parameters returned by
-    # BaseModule. Infer that transport when callers use the legacy signature.
-    if local is None:
-        local = is_local_endpoint(host, user)
-
-    if local:
-        # Run command locally using bash
-        return run_command(["bash", "-c", cmd], check=False, capture_output=True)
-
     ssh_cmd = ["ssh"]
 
     if identity_file:
@@ -129,10 +111,9 @@ def upload_file(
     user: str,
     identity_file: Optional[str] = None,
     port: int = 22,
-    local: Optional[bool] = None,
 ) -> bool:
     """
-    Upload file to remote host via SCP, or copy locally if local=True.
+    Upload a file to a remote host via SCP.
 
     Args:
         local_path: Local file path
@@ -141,25 +122,9 @@ def upload_file(
         user: SSH user
         identity_file: Path to SSH private key
         port: SSH port
-        local: If True, copy file locally instead of via SCP
-
     Returns:
         True if successful
     """
-    if local is None:
-        local = is_local_endpoint(host, user)
-
-    if local:
-        # Copy file locally
-        import shutil
-        try:
-            Path(remote_path).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(local_path, remote_path)
-            return True
-        except Exception as e:
-            print_error(f"Failed to copy file: {e}")
-            return False
-
     scp_cmd = ["scp"]
 
     if identity_file:
@@ -184,10 +149,9 @@ def download_file(
     user: str,
     identity_file: Optional[str] = None,
     port: int = 22,
-    local: Optional[bool] = None,
 ) -> bool:
     """
-    Download file from remote host via SCP, or copy locally if local=True.
+    Download a file from a remote host via SCP.
 
     Args:
         remote_path: Remote file path
@@ -196,24 +160,9 @@ def download_file(
         user: SSH user
         identity_file: Path to SSH private key
         port: SSH port
-        local: If True, copy file locally instead of via SCP
-
     Returns:
         True if successful
     """
-    if local is None:
-        local = is_local_endpoint(host, user)
-
-    if local:
-        import shutil
-        try:
-            Path(local_path).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(remote_path, local_path)
-            return True
-        except Exception as e:
-            print_error(f"Failed to copy file: {e}")
-            return False
-
     Path(local_path).parent.mkdir(parents=True, exist_ok=True)
 
     scp_cmd = ["scp"]

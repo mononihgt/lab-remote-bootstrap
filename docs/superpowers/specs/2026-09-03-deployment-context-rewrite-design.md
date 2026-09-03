@@ -42,11 +42,11 @@ callers. Callers do not inspect `target.*` or `cloud.*` to choose a user.
 
 ## Migration
 
-Existing local configurations remain valid without a `target` block. Existing
-remote configurations must include the already documented `target.host`,
-`target.user`, and `target.ssh_port` fields. Deprecated
-`deployment.ssh_identity_file` and cloud endpoint fallback are removed from
-the Python orchestration core.
+This is a clean break. Local configurations remain valid without a `target`
+block. Remote configurations must include `target.host`, `target.user`, and
+`target.ssh_port`. The deprecated `deployment.ssh_identity_file`, cloud
+endpoint fallback, `migrate` CLI command, and migration module are removed.
+The Python CLI supports only this configuration model.
 
 ## Verification
 

@@ -6,7 +6,10 @@
   "properties": {
     "deployment": {
       "type": "object",
-      "required": ["mode"],
+      "required": ["mode", "target"],
+      "not": {
+        "required": ["ssh_identity_file"]
+      },
       "properties": {
         "mode": {
           "type": "string",
@@ -18,10 +21,6 @@
           "enum": ["local", "remote"],
           "default": "remote",
           "description": "Deployment target: local (on current machine) or remote (via SSH)"
-        },
-        "ssh_identity_file": {
-          "type": "string",
-          "description": "Optional local SSH private key used to control the deployment target. Leave empty to use SSH config or agent."
         }
       }
     },
@@ -216,5 +215,27 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "deployment": {
+            "properties": {
+              "target": {"const": "remote"}
+            },
+            "required": ["target"]
+          }
+        }
+      },
+      "then": {
+        "required": ["target"],
+        "properties": {
+          "target": {
+            "required": ["host", "user", "ssh_port"]
+          }
+        }
+      }
+    }
+  ]
 }

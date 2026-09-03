@@ -6,11 +6,11 @@ import re
 import shlex
 import subprocess
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import requests
 
-from utils import run_ssh_command
+from deployment import DeploymentContext
 
 
 class HealthCheck:
@@ -28,25 +28,13 @@ class HealthCheck:
         """
         self.config = config
         self.runtime_context = runtime_context
+        self.context = None
+        if runtime_context == "controller" and config.get("deployment.target", "remote") == "remote":
+            self.context = DeploymentContext.from_config(config)
 
     def _is_remote_deployment(self) -> bool:
         """Return True when health checks should run on the SSH target."""
-        return (
-            self.runtime_context == "controller"
-            and self.config.get('deployment.target', 'remote') == 'remote'
-        )
-
-    def _get_remote_target_params(self) -> Tuple[str, str, Optional[str], int]:
-        """Get target SSH parameters for remote health checks."""
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('deployment.ssh_identity_file')
-        port = self.config.get('cloud.reverse_port', 2223)
-        host = self.config.get('target.host', host)
-        user = self.config.get('target.user', user)
-        identity_file = self.config.get('target.ssh_identity_file', identity_file)
-        port = self.config.get('target.ssh_port', port)
-        return host, user, identity_file, port
+        return self.context is not None
 
     def _run_system_command(self, cmd: List[str], timeout: int = 5) -> Tuple[int, str, str]:
         """Run a system command locally or on the configured remote target."""
@@ -64,8 +52,7 @@ class HealthCheck:
 
     def _run_remote_shell_command(self, cmd: str) -> Tuple[int, str, str]:
         """Run a shell command on the remote deployment target."""
-        host, user, identity_file, port = self._get_remote_target_params()
-        return run_ssh_command(host, user, cmd, identity_file, port)
+        return self.context.run(cmd)
 
     def run_all(self, check_connectivity: bool = True) -> Dict:
         """

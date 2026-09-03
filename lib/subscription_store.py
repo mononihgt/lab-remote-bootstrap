@@ -4,10 +4,10 @@
 import tempfile
 import shlex
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
+from deployment import DeploymentContext
 from subscription_paths import SubscriptionPaths, resolve_subscription_paths
-from utils import download_file, run_ssh_command, upload_file
 
 
 class SubscriptionStoreError(Exception):
@@ -30,6 +30,7 @@ class SubscriptionStore:
         self.local_paths = self.remote_paths
         self._tempdir = None
         self._remote_live = scope == "live" and config.is_remote_deployment
+        self.context = DeploymentContext.from_config(config) if self._remote_live else None
 
     def prepare(self):
         """Make subscription files available locally for the operation."""
@@ -82,44 +83,17 @@ class SubscriptionStore:
             self._tempdir.cleanup()
             self._tempdir = None
 
-    def _target_params(self) -> Tuple[str, str, Optional[str], int]:
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('deployment.ssh_identity_file')
-        port = self.config.get('cloud.reverse_port', 2223)
-        host = self.config.get('target.host', host)
-        user = self.config.get('target.user', user)
-        identity_file = self.config.get('target.ssh_identity_file', identity_file)
-        port = self.config.get('target.ssh_port', port)
-        return host, user, identity_file, port
-
     def _remote_file_exists(self, remote_path: str) -> bool:
-        host, user, identity_file, port = self._target_params()
-        returncode, _, _ = run_ssh_command(
-            host,
-            user,
-            f"test -f {shlex.quote(remote_path)}",
-            identity_file,
-            port,
-        )
+        returncode, _, _ = self.context.run(f"test -f {shlex.quote(remote_path)}")
         return returncode == 0
 
     def _ensure_remote_dir(self, remote_dir: str):
-        host, user, identity_file, port = self._target_params()
-        returncode, _, stderr = run_ssh_command(
-            host,
-            user,
-            f"mkdir -p {shlex.quote(remote_dir)}",
-            identity_file,
-            port,
-        )
+        returncode, _, stderr = self.context.run(f"mkdir -p {shlex.quote(remote_dir)}")
         if returncode != 0:
             raise SubscriptionStoreError(f"Failed to create remote directory {remote_dir}: {stderr}")
 
     def _download(self, remote_path: str, local_path: str) -> bool:
-        host, user, identity_file, port = self._target_params()
-        return download_file(remote_path, local_path, host, user, identity_file, port)
+        return self.context.download(remote_path, local_path)
 
     def _upload(self, local_path: str, remote_path: str) -> bool:
-        host, user, identity_file, port = self._target_params()
-        return upload_file(local_path, remote_path, host, user, identity_file, port)
+        return self.context.upload(local_path, remote_path)

@@ -1,7 +1,6 @@
 import sys
 import unittest
 from pathlib import Path
-import tempfile
 from unittest.mock import patch
 
 
@@ -28,48 +27,26 @@ class RunSshCommandTests(unittest.TestCase):
         self.assertIn("Python 3.6.9 is not supported", details)
         self.assertIn("python3.12 -m pip install -r requirements.txt", details)
 
-    def test_local_mode_runs_command_without_import_error(self):
+    def test_remote_ssh_command_builds_secure_ssh_invocation(self):
         from utils import run_ssh_command
 
-        returncode, stdout, stderr = run_ssh_command(
-            host="unused",
-            user="unused",
-            cmd="printf ok",
-            local=True,
-        )
-
-        self.assertEqual(returncode, 0)
-        self.assertEqual(stdout, "ok")
-        self.assertEqual(stderr, "")
-
-    def test_local_endpoint_does_not_spawn_ssh(self):
-        from utils import run_ssh_command
-
-        with patch("utils.getpass.getuser", return_value="unused"), \
-             patch("utils.run_command", return_value=(0, "ok", "")) as run:
-            self.assertEqual(
-                run_ssh_command("localhost", "unused", "printf ok"),
-                (0, "ok", ""),
-            )
+        with patch("utils.run_command", return_value=(0, "ok", "")) as run:
+            self.assertEqual(run_ssh_command("lab.example.com", "labuser", "printf ok"), (0, "ok", ""))
         run.assert_called_once_with(
-            ["bash", "-c", "printf ok"],
+            [
+                "ssh",
+                "-p",
+                "22",
+                "-o",
+                "StrictHostKeyChecking=accept-new",
+                "-o",
+                "ConnectTimeout=10",
+                "labuser@lab.example.com",
+                "printf ok",
+            ],
             check=False,
             capture_output=True,
         )
-
-    def test_local_endpoint_copies_files_without_scp(self):
-        from utils import upload_file
-
-        with tempfile.TemporaryDirectory() as tempdir:
-            source = Path(tempdir) / "source.txt"
-            destination = Path(tempdir) / "nested" / "destination.txt"
-            source.write_text("content")
-
-            with patch("utils.getpass.getuser", return_value="unused"):
-                self.assertTrue(
-                    upload_file(str(source), str(destination), "localhost", "unused")
-                )
-            self.assertEqual(destination.read_text(), "content")
 
 
 if __name__ == "__main__":

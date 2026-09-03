@@ -2,13 +2,8 @@
 """Zsh configuration module."""
 
 import json
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from modules import BaseModule
-from utils import print_error, print_info, print_success, run_ssh_command
+from utils import print_error, print_info, print_success
 
 
 class ZshModule(BaseModule):
@@ -16,35 +11,25 @@ class ZshModule(BaseModule):
 
     def validate(self) -> bool:
         """Validate Zsh module prerequisites."""
-        # Check if remote server is accessible
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-
-        if not host or not user:
-            print_error("Cloud host and user must be configured")
-            return False
-
         return True
 
     def deploy(self) -> bool:
         """Deploy Zsh configuration."""
         print_info("Deploying Zsh configuration...")
 
-        host, user, identity_file, reverse_port, _ = self.get_deployment_params()
-
         # Install tools
-        if not self._install_tools(host, user, identity_file, reverse_port):
+        if not self._install_tools():
             print_error("Failed to install tools")
             return False
 
         # Install plugins
-        if not self._install_plugins(host, user, identity_file, reverse_port):
+        if not self._install_plugins():
             print_error("Failed to install plugins")
             return False
 
         # Generate and write config
         config_block = self._generate_config_block()
-        if not self._write_config(host, user, identity_file, reverse_port, config_block):
+        if not self._write_config(config_block):
             print_error("Failed to write config")
             return False
 
@@ -56,7 +41,7 @@ class ZshModule(BaseModule):
         print_info("Zsh rollback not implemented")
         return True
 
-    def _install_tools(self, host: str, user: str, identity_file: str, port: int) -> bool:
+    def _install_tools(self) -> bool:
         """Install command-line tools."""
         print_info("Installing command-line tools...")
 
@@ -71,7 +56,7 @@ elif command -v apk >/dev/null 2>&1; then echo apk
 else echo unknown
 fi
 """
-        returncode, stdout, _ = run_ssh_command(host, user, detect_cmd, identity_file, port)
+        returncode, stdout, _ = self.context.run(detect_cmd)
         if returncode != 0:
             return False
 
@@ -92,24 +77,12 @@ fi
             print_error("Unknown package manager, cannot install zsh")
             return False
 
-        returncode, _, stderr = run_ssh_command(
-            host,
-            user,
-            f"{install_cmd} zsh",
-            identity_file,
-            port,
-        )
+        returncode, _, stderr = self.context.run(f"{install_cmd} zsh")
         if returncode != 0:
             print_error(f"Failed to install zsh: {stderr}")
             return False
 
-        returncode, _, stderr = run_ssh_command(
-            host,
-            user,
-            "command -v zsh",
-            identity_file,
-            port,
-        )
+        returncode, _, stderr = self.context.run("command -v zsh")
         if returncode != 0:
             print_error(f"zsh was not found after installation: {stderr}")
             return False
@@ -126,12 +99,12 @@ fi
         for tool in optional_tools[pkg_manager]:
             cmd = f"{install_cmd} {tool} 2>/dev/null || true"
             self.log(f"Installing {tool}")
-            run_ssh_command(host, user, cmd, identity_file, port)
+            self.context.run(cmd)
 
         print_success("Tools installation completed (best-effort)")
         return True
 
-    def _install_plugins(self, host: str, user: str, identity_file: str, port: int) -> bool:
+    def _install_plugins(self) -> bool:
         """Install Zsh plugins."""
         print_info("Installing Zsh plugins...")
 
@@ -140,7 +113,7 @@ fi
 
         # Create directories
         cmd = f"mkdir -p {plugins_dir} {themes_dir}"
-        run_ssh_command(host, user, cmd, identity_file, port)
+        self.context.run(cmd)
 
         # Install zsh-autosuggestions
         cmd = f"""
@@ -148,7 +121,7 @@ if [ ! -d {plugins_dir}/zsh-autosuggestions ]; then
     git clone https://github.com/zsh-users/zsh-autosuggestions {plugins_dir}/zsh-autosuggestions
 fi
 """
-        run_ssh_command(host, user, cmd, identity_file, port)
+        self.context.run(cmd)
 
         # Install zsh-syntax-highlighting
         cmd = f"""
@@ -156,7 +129,7 @@ if [ ! -d {plugins_dir}/zsh-syntax-highlighting ]; then
     git clone https://github.com/zsh-users/zsh-syntax-highlighting {plugins_dir}/zsh-syntax-highlighting
 fi
 """
-        run_ssh_command(host, user, cmd, identity_file, port)
+        self.context.run(cmd)
 
         # Install zsh-completions
         cmd = f"""
@@ -164,7 +137,7 @@ if [ ! -d {plugins_dir}/zsh-completions ]; then
     git clone https://github.com/zsh-users/zsh-completions {plugins_dir}/zsh-completions
 fi
 """
-        run_ssh_command(host, user, cmd, identity_file, port)
+        self.context.run(cmd)
 
         # Install powerlevel10k
         cmd = f"""
@@ -172,7 +145,7 @@ if [ ! -d {themes_dir}/powerlevel10k ]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git {themes_dir}/powerlevel10k
 fi
 """
-        run_ssh_command(host, user, cmd, identity_file, port)
+        self.context.run(cmd)
 
         print_success("Zsh plugins installed")
         return True
@@ -348,7 +321,7 @@ fi
 """
         return config
 
-    def _write_config(self, host: str, user: str, identity_file: str, port: int, config_block: str) -> bool:
+    def _write_config(self, config_block: str) -> bool:
         """Write config block to .zshrc."""
         print_info("Writing Zsh configuration...")
 
@@ -388,7 +361,7 @@ print('Configuration written to', zshrc_path)
 PYTHON_EOF
 """
 
-        returncode, stdout, stderr = run_ssh_command(host, user, write_cmd, identity_file, port)
+        returncode, stdout, stderr = self.context.run(write_cmd)
         if returncode != 0:
             print_error(f"Failed to write config: {stderr}")
             return False

@@ -5,10 +5,9 @@
 deployment:
   mode: host  # 'host' or 'docker'
   target: remote  # 'remote' (deploy via SSH) or 'local' (deploy on current machine)
-  # Deprecated compatibility field. Prefer target.ssh_identity_file for new configs.
-  ssh_identity_file: ""
 
-# Lab server SSH target used by lab-remote-ctl for remote deployment
+# Lab server SSH target used only when deployment.target is 'remote'.
+# Local deployments use the active local account as the target account.
 target:
   host: lab.example.com
   user: labuser

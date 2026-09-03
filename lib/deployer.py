@@ -13,9 +13,9 @@ from modules.clash_module import ClashModule
 from modules.autossh_module import AutoSSHModule
 from modules.zsh_module import ZshModule
 from modules.web_module import WebModule
+from deployment import DeploymentContext
 from utils import (
-    print_error, print_info, print_success, print_warning,
-    run_ssh_command
+    print_error, print_info, print_success, print_warning
 )
 
 
@@ -32,6 +32,7 @@ class Deployer:
         """
         self.config = config
         self.verbose = verbose
+        self.context = DeploymentContext.from_config(config)
         self.modules = {}
 
     def deploy(
@@ -62,15 +63,12 @@ class Deployer:
         print_info(f"Configuration: {self.config.config_path}")
         print_info(f"Deployment mode: {self.config.deployment_mode}")
 
-        if self.config.is_local_deployment:
-            import getpass
+        if self.context.target.is_local:
             print_info(f"Deployment target: LOCAL (deploying on this machine)")
-            print_info(f"Current user: {getpass.getuser()}\n")
+            print_info(f"Current user: {self.context.target.user}\n")
         else:
-            target_host = self.config.get('target.host', self.config.get('cloud.host'))
-            target_user = self.config.get('target.user', self.config.get('cloud.user'))
             print_info(f"Deployment target: REMOTE (via SSH)")
-            print_info(f"Target server: {target_user}@{target_host}\n")
+            print_info(f"Target server: {self.context.target.destination}\n")
 
         if dry_run:
             print_warning("DRY RUN MODE - No actual changes will be made\n")
@@ -200,24 +198,16 @@ class Deployer:
 
     def _validate_autossh_control_path(self, skip_autossh: bool) -> bool:
         """Reject AutoSSH redeploys that would restart the active SSH route."""
-        if skip_autossh or self.config.is_local_deployment:
+        if skip_autossh or self.context.target.is_local:
             return True
 
-        target_host, _, _, target_port = self._get_remote_target_params()
-        cloud_host = self.config.get('cloud.host')
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
-        target_port = self._parse_port(target_port, "target.ssh_port")
-        reverse_port = self._parse_port(reverse_port, "cloud.reverse_port")
-        if target_port is None or reverse_port is None:
-            return False
-
-        target_host = self._normalize_host(target_host)
-        cloud_host = self._normalize_host(cloud_host)
+        target_host = self._normalize_host(self.context.target.host)
+        cloud_host = self._normalize_host(self.context.cloud_tunnel.host)
         if (
             target_host is not None
             and cloud_host is not None
             and target_host == cloud_host
-            and target_port == reverse_port
+            and self.context.target.ssh_port == self.context.cloud_tunnel.reverse_port
         ):
             print_error("Unsafe remote AutoSSH deploy configuration")
             print_info(
@@ -244,24 +234,9 @@ class Deployer:
             return None
         return str(host).strip().strip("[]").rstrip(".").lower()
 
-    @staticmethod
-    def _parse_port(value, name):
-        """Parse a configured TCP port for preflight endpoint comparisons."""
-        try:
-            port = int(value)
-        except (TypeError, ValueError):
-            print_error(f"{name} must be a numeric TCP port")
-            return None
-
-        if port < 1 or port > 65535:
-            print_error(f"{name} must be between 1 and 65535")
-            return None
-
-        return port
-
     def _validate_remote_sudo(self) -> bool:
         """Validate sudo access on the deployment target."""
-        if self.config.is_local_deployment:
+        if self.context.target.is_local:
             if hasattr(os, "geteuid") and os.geteuid() == 0:
                 return True
             print_info("Checking local sudo access (enter your password if prompted)...")
@@ -276,16 +251,10 @@ class Deployer:
             print_info("Verify that your account has sudo access and run deploy from a terminal.")
             return False
 
-        host, user, identity_file, port = self._get_remote_target_params()
-        self._cleanup_target_known_hosts(host, port)
-
-        returncode, _, stderr = run_ssh_command(
-            host,
-            user,
-            "sudo -n true",
-            identity_file,
-            port,
+        self._cleanup_target_known_hosts(
+            self.context.target.host, self.context.target.ssh_port
         )
+        returncode, _, stderr = self.context.run("sudo -n true")
 
         if returncode == 0:
             return True
@@ -295,21 +264,10 @@ class Deployer:
             print_info(f"sudo check failed: {stderr.strip()}")
         print_info(
             f"Grant passwordless sudo on the target, for example: "
-            f"echo '{user} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/{user}"
+            f"echo '{self.context.target.user} ALL=(ALL) NOPASSWD:ALL' | "
+            f"sudo tee /etc/sudoers.d/{self.context.target.user}"
         )
         return False
-
-    def _get_remote_target_params(self):
-        """Get target SSH parameters for remote deployment."""
-        host = self.config.get('cloud.host')
-        user = self.config.get('cloud.user')
-        identity_file = self.config.get('deployment.ssh_identity_file')
-        port = self.config.get('cloud.reverse_port', 2223)
-        host = self.config.get('target.host', host)
-        user = self.config.get('target.user', user)
-        identity_file = self.config.get('target.ssh_identity_file', identity_file)
-        port = self.config.get('target.ssh_port', port)
-        return host, user, identity_file, port
 
     def _cleanup_target_known_hosts(self, host: str, port: int):
         """Remove stale known_hosts entries for the deployment target."""
@@ -418,15 +376,6 @@ class Deployer:
         skipped_modules = skipped_modules or []
         failed_modules = failed_modules or []
 
-        reverse_port = self.config.get('cloud.reverse_port', 2223)
-        cloud_host = self.config.get('cloud.host')
-        lab_user = self.config.get('target.user', self.config.get('cloud.user'))
-        target_host = self.config.get('target.host', cloud_host)
-        target_port = self.config.get('target.ssh_port', reverse_port)
-        target_identity_file = self.config.get(
-            'target.ssh_identity_file',
-            self.config.get('deployment.ssh_identity_file')
-        )
         clash_port = self.config.get('clash.mixed_port', 7890)
         clash_controller = self.config.get('clash.external_controller', '127.0.0.1:9090')
         clash_api_port = self.config.get('clash.api_port', 9090)
@@ -443,26 +392,37 @@ class Deployer:
 
         if 'autossh' in deployed_modules:
             print_info(f"  {step}. Connect to server via reverse tunnel:")
-            print_info(f"     ssh -p {reverse_port} {lab_user}@{cloud_host}\n")
+            print_info(f"     {' '.join(self.context.reverse_tunnel_ssh_args())}\n")
             step += 1
 
         if 'clash' in deployed_modules:
             print_info(f"  {step}. Add or update a Clash subscription:")
-            print_info("     lab-remote-ctl subscription add \"Name\" https://...")
-            print_info("     lab-remote-ctl subscription update \"Name\"")
+            print_info(
+                "     uv run --python 3.12 --with-requirements requirements.txt "
+                "./cli/lab-remote-ctl subscription add \"Name\" https://..."
+            )
+            print_info(
+                "     uv run --python 3.12 --with-requirements requirements.txt "
+                "./cli/lab-remote-ctl subscription update \"Name\""
+            )
             print_info(f"     Clash local proxy: 127.0.0.1:{clash_port}")
             print_info(f"     Clash controller: http://{clash_controller}\n")
             step += 1
 
         if 'web' in deployed_modules:
-            identity_arg = f" -i {target_identity_file}" if target_identity_file else ""
-            print_info(f"  {step}. Open the Web management UI through a local SSH tunnel:")
-            print_info(
-                f"     ssh -N -L {local_web_port}:127.0.0.1:{web_port} "
-                f"-L {clash_api_port}:127.0.0.1:{clash_api_port}"
-                f"{identity_arg} -p {target_port} {lab_user}@{target_host}"
-            )
-            print_info(f"     Web management UI: http://localhost:{local_web_port}\n")
+            if self.context.target.is_local:
+                print_info(f"  {step}. Web management UI: http://localhost:{web_port}\n")
+            else:
+                tunnel_args = self.context.target_ssh_args(
+                    "-N",
+                    "-L",
+                    f"{local_web_port}:127.0.0.1:{web_port}",
+                    "-L",
+                    f"{clash_api_port}:127.0.0.1:{clash_api_port}",
+                )
+                print_info(f"  {step}. Open the Web management UI through a local SSH tunnel:")
+                print_info(f"     {' '.join(tunnel_args)}")
+                print_info(f"     Web management UI: http://localhost:{local_web_port}\n")
             step += 1
 
         if 'zsh' in deployed_modules:
@@ -471,7 +431,10 @@ class Deployer:
             step += 1
 
         print_info(f"  {step}. Check system health:")
-        print_info("     lab-remote-ctl health\n")
+        print_info(
+            "     uv run --python 3.12 --with-requirements requirements.txt "
+            "./cli/lab-remote-ctl health\n"
+        )
 
         if skipped_modules:
             print_info(f"Skipped this run: {', '.join(skipped_modules)}")

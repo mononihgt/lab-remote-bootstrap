@@ -1,7 +1,6 @@
 # Lab Remote Bootstrap
 
-> **🚀 新版本 v2.0 已完成！**  
-> 全新模块化架构，提供强大的 CLI 工具 `lab-remote-ctl` 和现代化 Web 管理界面。
+> 提供一个明确的部署目标模型、CLI 工具和 Web 管理界面。
 > 
 > **核心功能**：
 > - ✅ 统一配置管理（YAML 格式 + JSON Schema 验证）
@@ -9,9 +8,9 @@
 > - ✅ Web 管理界面（Flask + Catppuccin Mocha 主题）
 > - ✅ 个性化 Zsh 配置同步（fzf, eza, bat, tldr, fastfetch）
 > - ✅ 健康检查系统（服务/端口/连通性）
-> - ✅ 配置迁移工具（从旧版本 .env 迁移）
+> - ✅ 明确区分实验室目标帐号与云端隧道帐号
 > 
-> 查看 [设计文档](docs/superpowers/specs/2026-07-01-modular-refactor-design.md) 了解详情。
+> 部署身份和传输规则见 [设计文档](docs/superpowers/specs/2026-09-03-deployment-context-rewrite-design.md)。
 >
 > ---
 
@@ -28,7 +27,7 @@
 
 ---
 
-## 快速开始（新架构 v2.0）
+## 快速开始
 
 ### 前置条件
 
@@ -37,7 +36,7 @@
 #### 1. 本地环境（运行 lab-remote-ctl 的机器）
 
 - Python 3.8+ 已安装（推荐 Python 3.12）
-- 可以通过 SSH 连接到云服务器和实验室服务器
+- 远程部署时，可以通过 SSH 连接到实验室服务器
 - 远程部署时，`target.ssh_identity_file` 是**本地机器上**用于连接实验室服务器的私钥；如果留空，则使用 `~/.ssh/config` 或 ssh-agent
 
 #### 2. 云服务器（用于反向 SSH 隧道）
@@ -82,11 +81,21 @@ ssh-copy-id -i ~/.ssh/id_ed25519_autossh.pub <cloud_user>@<cloud_host>
 ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 ```
 
-**重要**：这里有两个不同的 SSH 身份，不要混用：
+**身份模型**：这里有两个不同的 SSH 身份，绝不能互相回退或替代：
 
 - `target.*`：本地机器 → 实验室服务器，用于 `lab-remote-ctl` 远程部署。`target.ssh_identity_file` 可留空以使用 `~/.ssh/config` 或 ssh-agent。
 - `cloud.*`：实验室服务器 → 云服务器，用于 AutoSSH 反向隧道。`cloud.user` 是云服务器上的用户名，不是实验室服务器用户名。
 - `autossh.identity_file`：实验室服务器 → 云服务器，用于 AutoSSH 反向隧道。这里填写实验室服务器上的私钥路径，如 `~/.ssh/id_ed25519_autossh`。
+
+```text
+本机部署帐号 coreknowledge ── AutoSSH (使用 autossh.identity_file) ──> 云端帐号 mpxuann
+       ▲                                                                  │
+       └──────── ssh -p 2224 coreknowledge@39.106.136.35 ────────────────┘
+```
+
+本地部署时，反向隧道登录用户名总是运行 CLI 的当前本地帐号；例如上图中的
+`coreknowledge`。它绝不会变成云服务器帐号 `mpxuann`。远程部署时，反向隧道
+登录用户名总是显式配置的 `target.user`。
 
 #### 4. 网络连通性
 
@@ -98,12 +107,16 @@ ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
 ### 安装依赖
 
 ```bash
-# 使用运行 lab-remote-ctl 的同一个 Python 解释器安装依赖
-python --version
-python -m pip --version
-python -m pip install -r requirements.txt
-# 如果环境中的 python 仍指向旧版本，请显式使用：
-# python3.12 -m pip install -r requirements.txt
+# 每次运行 CLI 时，由 uv 选择 Python 3.12 并安装项目依赖
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl --help
+```
+
+如果不使用 `uv`，必须使用同一个解释器安装并运行：
+
+```bash
+python3.12 -m pip install -r requirements.txt
+python3.12 ./cli/lab-remote-ctl --help
 ```
 
 ### 方式 1：全新部署（首次部署 - 在实验室服务器上操作）
@@ -117,14 +130,14 @@ python -m pip install -r requirements.txt
 # 方式 B: 如果服务器可以访问 GitHub
 git clone https://github.com/mononihgt/lab-remote-bootstrap.git
 cd lab-remote-bootstrap
-python -m pip install -r requirements.txt
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl --help
 ```
 
 #### 2. 在服务器上初始化配置
 
 ```bash
 # 在实验室服务器上执行
-./cli/lab-remote-ctl init --interactive
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init --interactive
 ```
 
 **关键配置**：
@@ -137,7 +150,7 @@ python -m pip install -r requirements.txt
 
 ```bash
 # 在实验室服务器上执行
-./cli/lab-remote-ctl deploy
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy
 ```
 
 本地部署会在预检阶段通过 `sudo -v` 交互式请求一次当前用户密码，后续
@@ -153,7 +166,7 @@ Clash、AutoSSH、Web 和系统服务操作复用 sudo 凭据缓存；请从终�
 ssh -p 2223 <lab_user>@<cloud_host>
 ```
 
-**后续管理**：首次部署完成后，可以在本地使用 `lab-remote-ctl` 远程管理（将 `deployment.target` 改为 `remote`）。
+**后续管理**：首次部署完成后，可在本地使用同一条 `uv run ... ./cli/lab-remote-ctl` 命令远程管理。将 `deployment.target` 改为 `remote`，并完整填写 `target.host`、`target.user` 与 `target.ssh_port`。
 
 ---
 
@@ -163,10 +176,10 @@ ssh -p 2223 <lab_user>@<cloud_host>
 
 ```bash
 # 交互式配置向导（推荐）
-./cli/lab-remote-ctl init --interactive
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init --interactive
 
 # 或使用模板然后手动编辑
-./cli/lab-remote-ctl init
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init
 vim config/config.yaml
 ```
 
@@ -185,6 +198,7 @@ vim config/config.yaml
 
 ```yaml
 deployment:
+  mode: host
   target: remote
 
 target:
@@ -211,12 +225,12 @@ autossh:
 
 ```bash
 # 完整部署（Clash + AutoSSH + Zsh + Web）
-./cli/lab-remote-ctl deploy
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy
 
 # 选择性部署
-./cli/lab-remote-ctl deploy --skip-web  # 跳过 Web 界面
-./cli/lab-remote-ctl deploy --skip-autossh  # 只通过现有反向隧道更新其他模块
-./cli/lab-remote-ctl deploy --dry-run   # 预览部署计划
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-web  # 跳过 Web 界面
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-autossh  # 只通过现有反向隧道更新其他模块
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --dry-run   # 预览部署计划
 ```
 
 重新部署 Clash 时，CLI 会先将新的内核上传到临时路径，再原子替换
@@ -236,9 +250,9 @@ ssh -p 2223 <lab_user>@<cloud_host>
 
 需要远程维护时请选择以下方式之一：
 
-- 如果只更新 Clash、Zsh 或 Web，使用现有反向隧道执行 `./cli/lab-remote-ctl deploy --skip-autossh`。
+- 如果只更新 Clash、Zsh 或 Web，使用现有反向隧道执行 `uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-autossh`。
 - 如果需要重新部署 AutoSSH，使用独立维护通道设置 `target.*`，例如直连实验室服务器的 SSH 端口、VPN 内网地址，或另一个不会被本次 AutoSSH 配置清理/重启的反向隧道端口。
-- 如果没有独立维护通道，先 SSH 到实验室服务器，在服务器本机将 `deployment.target` 设为 `local` 后执行 `./cli/lab-remote-ctl deploy`。
+- 如果没有独立维护通道，先 SSH 到实验室服务器，在服务器本机将 `deployment.target` 设为 `local` 后执行 `uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy`。
 
 `deploy` 结束时会根据本次实际结果输出对应的 Next steps：成功部署的模块会显示后续操作，跳过的模块不会显示对应步骤，Zsh/Web 等非关键模块失败时会优先提示修复并重新部署。
 
@@ -267,34 +281,34 @@ config/clash.generated.yaml
 
 ```bash
 # 添加订阅到 live 目标
-./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription
 
 # 更新订阅、设为 active、生成 Clash 配置并重启 live 目标上的 Clash
-./cli/lab-remote-ctl subscription update "主力节点"
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription update "主力节点"
 
 # 查看 live 目标上的订阅
-./cli/lab-remote-ctl subscription list
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription list
 
 # 只查看 workspace 文件
-./cli/lab-remote-ctl subscription list --scope workspace
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription list --scope workspace
 
 # 只更新 workspace，稍后再通过 deploy 发布
-./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription --scope workspace
-./cli/lab-remote-ctl subscription update "主力节点" --scope workspace
-./cli/lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription --scope workspace
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription update "主力节点" --scope workspace
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web
 
 # 标记订阅为 active；要重新生成 Clash 配置仍需 update
-./cli/lab-remote-ctl subscription activate "主力节点"
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription activate "主力节点"
 ```
 
 #### 5. 健康检查
 
 ```bash
 # 检查系统健康状态
-./cli/lab-remote-ctl health
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl health
 
 # JSON 格式输出
-./cli/lab-remote-ctl health --json
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl health --json
 ```
 
 当 `deployment.target: remote` 时，健康检查会通过 `target.*` SSH 配置在实验室服务器上检查进程、监听端口、Clash API 和代理连通性；本地机器不会再被误判为部署目标。
@@ -303,13 +317,13 @@ config/clash.generated.yaml
 
 ```bash
 # 启动 Web 服务
-./cli/lab-remote-ctl web start
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web start
 
 # 在浏览器中打开
-./cli/lab-remote-ctl web open
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web open
 
 # 停止 Web 服务
-./cli/lab-remote-ctl web stop
+uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web stop
 ```
 
 远程部署时，Web 服务默认只监听实验室服务器本机的 `127.0.0.1:5000`，Clash 控制端口默认只监听实验室服务器本机的 `127.0.0.1:9090`。在本地 PC 访问前先建立 SSH 隧道：
@@ -319,19 +333,6 @@ ssh -N -L 5001:127.0.0.1:5000 -L 9090:127.0.0.1:9090 sr665-4
 ```
 
 `lab-remote-ctl web start` 和 `lab-remote-ctl web open` 在远程部署模式下会自动启动该本地隧道，然后打开 `http://localhost:5001`。`lab-remote-ctl web stop` 会停止远端 Web 服务，并清理本地隧道。不要直接访问本地 `http://localhost:5000`；macOS 可能已由 AirPlay/Control Center 占用该端口。
-
-### 方式 3：从旧版本迁移
-
-```bash
-# 迁移旧版本配置
-./cli/lab-remote-ctl migrate host/host-stack.env
-
-# 预览迁移（不写入文件）
-./cli/lab-remote-ctl migrate host/host-stack.env --dry-run
-
-# 然后正常部署
-./cli/lab-remote-ctl deploy
-```
 
 ### CLI 命令总览
 
@@ -350,7 +351,6 @@ lab-remote-ctl
 │   ├── start        # 启动服务
 │   ├── stop         # 停止服务
 │   └── open         # 打开界面
-└── migrate           # 配置迁移
 ```
 
 **重要说明**：
@@ -372,10 +372,10 @@ lab-remote-ctl
 ```
 ┌─────────────┐
 │  本地 PC    │  1. 安装依赖: python -m pip install -r requirements.txt
-│             │  2. 初始化配置: ./cli/lab-remote-ctl init --interactive
-└──────┬──────┘  3. 部署: ./cli/lab-remote-ctl deploy
+│             │  2. 初始化配置: uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init --interactive
+└──────┬──────┘  3. 部署: uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy
        │         4. 管理订阅: init 时填写 URL 或 subscription add/update
-       │ SSH     5. Web 管理: ./cli/lab-remote-ctl web open
+       │ SSH     5. Web 管理: uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web open
        ↓
 ┌──────────────────┐
 │  云服务器        │  前置准备: bash cloud/prepare_cloud_reverse_ssh.sh 2223

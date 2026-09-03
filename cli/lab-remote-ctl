@@ -17,7 +17,8 @@ from typing import List, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 import click
-from config import Config, ConfigError, load_config
+from config import ConfigError, load_config
+from deployment import DeploymentContext
 from utils import check_python_version, print_error, print_success, print_info
 
 
@@ -32,35 +33,21 @@ class WebAccess:
 def resolve_web_access(config) -> WebAccess:
     """Resolve how the operator should access the Web UI."""
     web_port = config.get('web.port', 5000)
+    context = DeploymentContext.from_config(config)
 
-    if not config.is_remote_deployment:
+    if context.target.is_local:
         return WebAccess(url=f"http://localhost:{web_port}")
 
     local_web_port = config.get('web.local_port', 5001)
     clash_api_port = config.get('clash.api_port', 9090)
-    host = config.get('target.host', config.get('cloud.host'))
-    user = config.get('target.user', config.get('cloud.user'))
-    ssh_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
-    identity_file = config.get(
-        'target.ssh_identity_file',
-        config.get('deployment.ssh_identity_file')
-    )
-
-    destination = f"{user}@{host}"
-    display_args = [
-        "ssh",
+    display_args = context.target_ssh_args(
         "-N",
         "-L",
         f"{local_web_port}:127.0.0.1:{web_port}",
         "-L",
         f"{clash_api_port}:127.0.0.1:{clash_api_port}",
-    ]
-    if identity_file:
-        display_args.extend(["-i", identity_file])
-    display_args.extend(["-p", str(ssh_port), destination])
-
-    tunnel_args = [
-        "ssh",
+    )
+    tunnel_args = context.target_ssh_args(
         "-fN",
         "-o",
         "ExitOnForwardFailure=yes",
@@ -68,10 +55,7 @@ def resolve_web_access(config) -> WebAccess:
         f"{local_web_port}:127.0.0.1:{web_port}",
         "-L",
         f"{clash_api_port}:127.0.0.1:{clash_api_port}",
-    ]
-    if identity_file:
-        tunnel_args.extend(["-i", identity_file])
-    tunnel_args.extend(["-p", str(ssh_port), destination])
+    )
 
     return WebAccess(
         url=f"http://localhost:{local_web_port}",
@@ -244,23 +228,9 @@ def subscription_scope_option(func):
 
 def restart_clash_service(config) -> bool:
     """Restart Clash on the live deployment target."""
-    cmd = "sudo systemctl restart lab-clash.service"
-
-    if config.is_remote_deployment:
-        host = config.get('target.host', config.get('cloud.host'))
-        user = config.get('target.user', config.get('cloud.user'))
-        identity_file = config.get(
-            'target.ssh_identity_file',
-            config.get('deployment.ssh_identity_file')
-        )
-        port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
-
-        from utils import run_ssh_command
-
-        returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, port)
-    else:
-        result = subprocess.run(cmd.split(), check=False, capture_output=True, text=True)
-        returncode, stderr = result.returncode, result.stderr
+    returncode, _, stderr = DeploymentContext.from_config(config).run(
+        "sudo systemctl restart lab-clash.service"
+    )
 
     if returncode != 0:
         print_error(f"Failed to restart Clash service: {stderr}")
@@ -268,6 +238,11 @@ def restart_clash_service(config) -> bool:
 
     print_success("Clash service restarted")
     return True
+
+
+def run_target_service_command(config, command: str):
+    """Run a systemd command on the configured deployment target."""
+    return DeploymentContext.from_config(config).run(command)
 
 
 @click.group()
@@ -412,9 +387,10 @@ docker:
 
     print_info(f"\nNext steps:")
     print_info(f"  1. Edit {target_config} to customize your setup")
-    print_info("  2. Add an initial subscription with 'lab-remote-ctl subscription add <name> <url> --scope workspace'")
-    print_info("  3. Run 'lab-remote-ctl subscription update <name> --scope workspace' to generate Clash config")
-    print_info(f"  4. Run 'lab-remote-ctl deploy' to deploy")
+    command = "uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl"
+    print_info(f"  2. Add a subscription with '{command} subscription add <name> <url> --scope workspace'")
+    print_info(f"  3. Run '{command} subscription update <name> --scope workspace' to generate Clash config")
+    print_info(f"  4. Run '{command} deploy' to deploy")
 
 
 @cli.command()
@@ -430,7 +406,7 @@ def deploy(ctx, dry_run, skip_clash, skip_autossh, skip_zsh, skip_web):
         config = load_config(ctx.obj.get('config_path'))
     except ConfigError as e:
         print_error(f"Configuration error: {e}")
-        print_info("Run 'lab-remote-ctl init' to create a configuration file")
+        print_info("Run 'uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init' to create a configuration file")
         sys.exit(1)
 
     from deployer import deploy as run_deploy
@@ -495,7 +471,10 @@ def subscription_add(ctx, name, url, template, scope):
         print_info(f"  URL: {url}")
         print_info(f"  Template: {template}")
         scope_arg = "" if scope == "live" else " --scope workspace"
-        print_info(f"\nRun 'lab-remote-ctl subscription update {name}{scope_arg}' to download and activate")
+        print_info(
+            f"\nRun 'uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription update {name}{scope_arg}' "
+            "to download and activate"
+        )
     except Exception as e:
         print_error(f"Failed to add subscription: {e}")
         sys.exit(1)
@@ -525,7 +504,7 @@ def subscription_list(ctx, scope):
 
         if not subs:
             print_info("No subscriptions found")
-            print_info("Add one with: lab-remote-ctl subscription add <name> <url>")
+            print_info("Add one with: uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription add <name> <url>")
             return
 
         active = sub_manager.data.get('active')
@@ -574,7 +553,10 @@ def subscription_activate(ctx, name, scope):
         store.sync(upload_config=False)
         print_success(f"Activated subscription: {name}")
         scope_arg = "" if scope == "live" else " --scope workspace"
-        print_info(f"Run 'lab-remote-ctl subscription update {name}{scope_arg}' to regenerate Clash config")
+        print_info(
+            f"Run 'uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription update {name}{scope_arg}' "
+            "to regenerate Clash config"
+        )
     except Exception as e:
         print_error(f"Failed to activate subscription: {e}")
         sys.exit(1)
@@ -619,7 +601,10 @@ def subscription_update(ctx, name, scope):
             if not restart_clash_service(config):
                 sys.exit(1)
         else:
-            print_info("\nRun 'lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web' to publish workspace changes")
+            print_info(
+                "\nRun 'uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web' "
+                "to publish workspace changes"
+            )
 
     except Exception as e:
         print_error(f"Failed to update subscription: {e}")
@@ -710,22 +695,9 @@ def web_start(ctx):
         print_error(f"Configuration error: {e}")
         sys.exit(1)
 
-    cmd = "sudo systemctl start lab-web.service"
-    if config.is_remote_deployment:
-        host = config.get('target.host', config.get('cloud.host'))
-        user = config.get('target.user', config.get('cloud.user'))
-        identity_file = config.get(
-            'target.ssh_identity_file',
-            config.get('deployment.ssh_identity_file')
-        )
-        reverse_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
-
-        from utils import run_ssh_command
-
-        returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
-    else:
-        result = subprocess.run(cmd.split(), check=False, capture_output=True, text=True)
-        returncode, stderr = result.returncode, result.stderr
+    returncode, _, stderr = run_target_service_command(
+        config, "sudo systemctl start lab-web.service"
+    )
 
     if returncode == 0:
         print_success("Web service started")
@@ -751,22 +723,9 @@ def web_stop(ctx):
         print_error(f"Configuration error: {e}")
         sys.exit(1)
 
-    cmd = "sudo systemctl stop lab-web.service"
-    if config.is_remote_deployment:
-        host = config.get('target.host', config.get('cloud.host'))
-        user = config.get('target.user', config.get('cloud.user'))
-        identity_file = config.get(
-            'target.ssh_identity_file',
-            config.get('deployment.ssh_identity_file')
-        )
-        reverse_port = config.get('target.ssh_port', config.get('cloud.reverse_port', 2223))
-
-        from utils import run_ssh_command
-
-        returncode, _, stderr = run_ssh_command(host, user, cmd, identity_file, reverse_port)
-    else:
-        result = subprocess.run(cmd.split(), check=False, capture_output=True, text=True)
-        returncode, stderr = result.returncode, result.stderr
+    returncode, _, stderr = run_target_service_command(
+        config, "sudo systemctl stop lab-web.service"
+    )
 
     if returncode == 0:
         access = resolve_web_access(config)
@@ -798,74 +757,6 @@ def web_open(ctx):
 
     import webbrowser
     webbrowser.open(access.url)
-
-
-@cli.command()
-@click.argument('env_file', type=click.Path(exists=True))
-@click.option('--output', '-o', help='Output path for config.yaml')
-@click.option('--subscriptions', '-s', help='Output path for subscriptions.json')
-@click.option('--dry-run', is_flag=True, help='Show what would be migrated without writing files')
-@click.pass_context
-def migrate(ctx, env_file, output, subscriptions, dry_run):
-    """Migrate old .env configuration to new format."""
-    from migrate import migrate_env_to_yaml, MigrationError
-    from pathlib import Path
-
-    try:
-        # Determine output paths
-        project_root = Path(__file__).parent.parent
-
-        if not output:
-            output = project_root / "config" / "config.yaml"
-
-        if not subscriptions:
-            # Derive from config or use default
-            install_root = "/opt/lab-remote-stack"
-            subscriptions = f"{install_root}/clash/subscriptions.json"
-
-        # Run migration
-        print_info(f"Migrating configuration from: {env_file}")
-        if dry_run:
-            print_info("DRY RUN MODE - No files will be written")
-
-        config_data, subscriptions_data, report = migrate_env_to_yaml(
-            env_file,
-            config_output=str(output) if not dry_run else None,
-            subscriptions_output=subscriptions if not dry_run else None,
-            dry_run=dry_run
-        )
-
-        # Display report
-        click.echo("\n" + report)
-
-        if not dry_run:
-            print_success(f"\nMigration completed successfully!")
-            print_info(f"  Config written to: {output}")
-
-            if subscriptions_data:
-                print_info(f"  Subscriptions written to: {subscriptions}")
-                print_info(f"\nNext steps:")
-                print_info(f"  1. Review {output} and customize as needed")
-                print_info(f"  2. Run 'lab-remote-ctl subscription update Default' to download subscription")
-                print_info(f"  3. Run 'lab-remote-ctl deploy' to deploy")
-            else:
-                print_info(f"\nNext steps:")
-                print_info(f"  1. Review {output} and customize as needed")
-                print_info(f"  2. Add a subscription with 'lab-remote-ctl subscription add <name> <url>'")
-                print_info(f"  3. Run 'lab-remote-ctl deploy' to deploy")
-        else:
-            print_info("\nDry run completed. Use without --dry-run to write files.")
-
-    except MigrationError as e:
-        print_error(f"Migration failed: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print_error(f"Unexpected error during migration: {e}")
-        if ctx.obj.get('verbose'):
-            import traceback
-            traceback.print_exc()
-        sys.exit(1)
-
 
 if __name__ == '__main__':
     cli(obj={})

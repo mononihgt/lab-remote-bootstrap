@@ -87,11 +87,11 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertNotIn("Add VPN subscription URL now?", result.output)
         self.assertIn(
-            "lab-remote-ctl subscription add <name> <url> --scope workspace",
+            "./cli/lab-remote-ctl subscription add <name> <url> --scope workspace",
             result.output,
         )
         self.assertIn(
-            "lab-remote-ctl subscription update <name> --scope workspace",
+            "./cli/lab-remote-ctl subscription update <name> --scope workspace",
             result.output,
         )
 
@@ -150,12 +150,15 @@ class InitConfigGenerationTests(unittest.TestCase):
 
             def get(self, key_path, default=None):
                 values = {
+                    "deployment.target": "remote",
                     "target.host": "203.0.113.10",
                     "target.user": "labuser",
                     "target.ssh_port": 2222,
                     "target.ssh_identity_file": "~/.ssh/id_target",
                     "web.port": 5000,
                     "clash.api_port": 9090,
+                    "cloud.host": "cloud.example.com",
+                    "cloud.user": "clouduser",
                 }
                 return values.get(key_path, default)
 
@@ -165,7 +168,7 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertEqual(
             access.tunnel_command,
             "ssh -N -L 5001:127.0.0.1:5000 -L 9090:127.0.0.1:9090 "
-            "-i ~/.ssh/id_target -p 2222 labuser@203.0.113.10",
+            f"-i {Path('~/.ssh/id_target').expanduser()} -p 2222 labuser@203.0.113.10",
         )
         self.assertEqual(
             access.tunnel_args,
@@ -179,7 +182,7 @@ class InitConfigGenerationTests(unittest.TestCase):
                 "-L",
                 "9090:127.0.0.1:9090",
                 "-i",
-                "~/.ssh/id_target",
+                str(Path("~/.ssh/id_target").expanduser()),
                 "-p",
                 "2222",
                 "labuser@203.0.113.10",
@@ -193,9 +196,13 @@ class InitConfigGenerationTests(unittest.TestCase):
             is_remote_deployment = False
 
             def get(self, key_path, default=None):
-                if key_path == "web.port":
-                    return 5000
-                return default
+                values = {
+                    "deployment.target": "local",
+                    "web.port": 5000,
+                    "cloud.host": "cloud.example.com",
+                    "cloud.user": "clouduser",
+                }
+                return values.get(key_path, default)
 
         access = cli.resolve_web_access(Config())
 
