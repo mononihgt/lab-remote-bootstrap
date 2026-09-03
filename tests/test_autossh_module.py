@@ -24,6 +24,22 @@ class FakeConfig:
 
 
 class AutoSSHModuleTests(unittest.TestCase):
+    def test_apt_install_attempts_existing_indexes_before_refreshing_repositories(self):
+        from modules.autossh_module import AutoSSHModule
+
+        module = AutoSSHModule(FakeConfig())
+
+        with patch("modules.autossh_module.run_ssh_command") as run_ssh_command:
+            run_ssh_command.return_value = (0, "", "")
+
+            self.assertTrue(module._install_autossh("host", "user", "id", 22))
+
+        command = run_ssh_command.call_args.args[2]
+        self.assertLess(
+            command.index("sudo apt-get install -y autossh"),
+            command.index("sudo apt-get update -qq"),
+        )
+
     def test_cleanup_reverse_port_runs_on_cloud_through_lab_target(self):
         from modules.autossh_module import AutoSSHModule
 

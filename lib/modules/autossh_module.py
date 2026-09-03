@@ -113,7 +113,12 @@ class AutoSSHModule(BaseModule):
 
         # Detect package manager and install
         cmd = """
-if command -v apt-get >/dev/null 2>&1; then
+if command -v autossh >/dev/null 2>&1; then
+    exit 0
+elif command -v apt-get >/dev/null 2>&1; then
+    if sudo apt-get install -y autossh; then
+        exit 0
+    fi
     sudo apt-get update -qq && sudo apt-get install -y autossh
 elif command -v dnf >/dev/null 2>&1; then
     sudo dnf install -y autossh
