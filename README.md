@@ -138,6 +138,9 @@ python -m pip install -r requirements.txt
 ./cli/lab-remote-ctl deploy
 ```
 
+本地部署会在预检阶段通过 `sudo -v` 交互式请求一次当前用户密码，后续
+Clash、AutoSSH、Web 和系统服务操作复用 sudo 凭据缓存；请从终端运行命令。
+
 首次部署完成后，AutoSSH 会建立到云服务器的反向隧道，之后就可以从任何地方通过云服务器访问实验室服务器了：
 
 ```bash

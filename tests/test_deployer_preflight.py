@@ -126,7 +126,8 @@ class DeployerPreflightTests(unittest.TestCase):
         )
         deployer = Deployer(config)
 
-        with patch("deployer.subprocess.run") as run:
+        with patch("deployer.os.geteuid", return_value=501), \
+             patch("deployer.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess(["sudo", "-v"], 0)
             self.assertTrue(deployer._validate_remote_sudo())
 
@@ -138,7 +139,8 @@ class DeployerPreflightTests(unittest.TestCase):
         config = FakeConfig({"deployment": {"target": "local"}})
         deployer = Deployer(config)
 
-        with patch("deployer.subprocess.run") as run:
+        with patch("deployer.os.geteuid", return_value=501), \
+             patch("deployer.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess(["sudo", "-v"], 1)
             self.assertFalse(deployer._validate_remote_sudo())
 
