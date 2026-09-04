@@ -43,7 +43,6 @@ clash:
 autossh:
   # Server-side key on the lab machine, used by AutoSSH to connect to the cloud server.
   identity_file: ~/.ssh/id_ed25519_autossh
-  monitor_port: 20000
 
 # Zsh terminal configuration
 zsh:

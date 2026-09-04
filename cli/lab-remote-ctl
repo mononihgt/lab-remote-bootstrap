@@ -179,7 +179,6 @@ clash:
 
 autossh:
   identity_file: {autossh_identity_file}
-  monitor_port: 20000
 
 zsh:
   enable_plugins: true

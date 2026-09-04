@@ -17,7 +17,6 @@ class FakeConfig:
             "cloud.reverse_port": 2224,
             "cloud.reverse_bind_address": "0.0.0.0",
             "autossh.identity_file": "~/.ssh/id_autossh",
-            "autossh.monitor_port": 20000,
         }
         return values.get(key_path, default)
 
@@ -36,13 +35,16 @@ class AutoSSHModuleTests(unittest.TestCase):
         context.run.return_value = (0, "", "")
         module.context = context
 
-        self.assertTrue(module._create_systemd_service(20000, "~/.ssh/id_autossh"))
+        self.assertTrue(module._create_systemd_service("~/.ssh/id_autossh"))
 
         command = context.run.call_args.args[0]
         self.assertIn("User=labuser", command)
         self.assertIn("-R 0.0.0.0:2224:localhost:22", command)
         self.assertIn("clouduser@cloud.example.com", command)
-        self.assertIn("-i %h/.ssh/id_autossh", command)
+        self.assertIn("target_home=$(getent passwd", command)
+        self.assertIn('-i "$target_home"/.ssh/id_autossh', command)
+        self.assertIn("-M 0", command)
+        self.assertNotIn("AUTOSSH_PORT=", command)
         self.assertNotIn("User=clouduser", command)
 
     def test_validation_requires_only_server_side_autossh_identity(self):

@@ -129,12 +129,6 @@
         "identity_file": {
           "type": "string",
           "minLength": 1
-        },
-        "monitor_port": {
-          "type": "integer",
-          "minimum": 1024,
-          "maximum": 65535,
-          "default": 20000
         }
       }
     },

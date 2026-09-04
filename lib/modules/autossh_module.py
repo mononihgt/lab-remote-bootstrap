@@ -22,13 +22,12 @@ class AutoSSHModule(BaseModule):
         """Install, configure, and start the AutoSSH service on the target."""
         print_info("Deploying AutoSSH reverse tunnel...")
         identity_file = self.config.get("autossh.identity_file")
-        monitor_port = self.config.get("autossh.monitor_port", 20000)
 
         if not self._install_autossh():
             return False
         if not self._setup_ssh_key(identity_file):
             return False
-        if not self._create_systemd_service(monitor_port, identity_file):
+        if not self._create_systemd_service(identity_file):
             return False
         if not self._cleanup_reverse_port(identity_file):
             return False
@@ -143,10 +142,36 @@ exit 0
         print_success("Stale reverse SSH listener cleaned")
         return True
 
-    def _create_systemd_service(self, monitor_port: int, identity_file: str) -> bool:
+    def _create_systemd_service(self, identity_file: str) -> bool:
         print_info("Creating systemd service...")
         tunnel = self.context.cloud_tunnel
-        systemd_identity_file = self._systemd_identity_path(identity_file)
+        destination = f"{shlex.quote(tunnel.user)}@{shlex.quote(tunnel.host)}"
+        reverse_forward = (
+            f"{tunnel.reverse_bind_address}:{tunnel.reverse_port}:localhost:22"
+        )
+        autossh_arguments = (
+            "-M 0 -N "
+            '-o "ServerAliveInterval=30" '
+            '-o "ServerAliveCountMax=3" '
+            '-o "StrictHostKeyChecking=no" '
+            '-o "ExitOnForwardFailure=yes" '
+        )
+        if identity_file.startswith("~/") or identity_file == "~":
+            identity_argument = '"$target_home"'
+            if identity_file.startswith("~/"):
+                identity_argument += "/" + shlex.quote(identity_file[2:])
+            autossh_command = (
+                'target_home=$(getent passwd "$(id -u)" | cut -d: -f6); '
+                f"exec /usr/bin/autossh {autossh_arguments}"
+                f"-i {identity_argument} -R {shlex.quote(reverse_forward)} {destination}"
+            )
+            exec_start = f"ExecStart=/bin/sh -c {shlex.quote(autossh_command)}"
+        else:
+            exec_start = (
+                f"ExecStart=/usr/bin/autossh {autossh_arguments}"
+                f"-i {shlex.quote(identity_file)} -R {shlex.quote(reverse_forward)} "
+                f"{destination}"
+            )
         service_content = f"""[Unit]
 Description=AutoSSH Reverse Tunnel
 After=network.target
@@ -155,15 +180,7 @@ After=network.target
 Type=simple
 User={self.context.target.user}
 Environment="AUTOSSH_GATETIME=0"
-Environment="AUTOSSH_PORT={monitor_port}"
-ExecStart=/usr/bin/autossh -M {monitor_port} -N \\
-    -o "ServerAliveInterval=30" \\
-    -o "ServerAliveCountMax=3" \\
-    -o "StrictHostKeyChecking=no" \\
-    -o "ExitOnForwardFailure=yes" \\
-    -i {systemd_identity_file} \\
-    -R {tunnel.reverse_bind_address}:{tunnel.reverse_port}:localhost:22 \\
-    {tunnel.user}@{tunnel.host}
+{exec_start}
 Restart=always
 RestartSec=10s
 
@@ -192,15 +209,6 @@ sudo systemctl enable lab-autossh.service
         if identity_file.startswith("~/"):
             return '"$HOME"/' + shlex.quote(identity_file[2:])
         return shlex.quote(identity_file)
-
-    @staticmethod
-    def _systemd_identity_path(identity_file: str) -> str:
-        """Resolve a home-relative identity path in a systemd unit."""
-        if identity_file == "~":
-            return "%h"
-        if identity_file.startswith("~/"):
-            return "%h/" + identity_file[2:]
-        return identity_file
 
     def _start_service(self) -> bool:
         print_info("Starting AutoSSH service...")

@@ -86,6 +86,9 @@ autossh:
 as `~/.ssh/id_ed25519_autossh` are expanded using the target account's home
 directory for both setup commands and the systemd service.
 
+The tunnel relies on SSH keepalives and systemd restarts, so it does not
+reserve a separate AutoSSH monitor port on the cloud server.
+
 Remote deployment requires all target fields. Target SSH keys are optional;
 leave the field empty to use `~/.ssh/config` or an SSH agent:
 

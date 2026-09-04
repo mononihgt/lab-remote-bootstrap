@@ -45,6 +45,7 @@ class InitConfigGenerationTests(unittest.TestCase):
         self.assertEqual(data["target"]["ssh_identity_file"], "~/.ssh/id_target")
         self.assertEqual(data["cloud"]["user"], "clouduser")
         self.assertEqual(data["cloud"]["reverse_port"], 2222)
+        self.assertNotIn("monitor_port", data["autossh"])
         self.assertNotIn("ssh_identity_file", data["deployment"])
 
     def test_subscription_seed_json_is_empty_by_default(self):
