@@ -1,200 +1,89 @@
 # Lab Remote Bootstrap
 
-> 提供一个明确的部署目标模型、CLI 工具和 Web 管理界面。
-> 
-> **核心功能**：
-> - ✅ 统一配置管理（YAML 格式 + JSON Schema 验证）
-> - ✅ Clash 订阅管理（支持 Base64 编码订阅和 YAML 订阅）
-> - ✅ Web 管理界面（Flask + Catppuccin Mocha 主题）
-> - ✅ 个性化 Zsh 配置同步（fzf, eza, bat, tldr, fastfetch）
-> - ✅ 健康检查系统（服务/端口/连通性）
-> - ✅ 明确区分实验室目标帐号与云端隧道帐号
-> 
-> 部署身份和传输规则见 [设计文档](docs/superpowers/specs/2026-09-03-deployment-context-rewrite-design.md)。
->
-> ---
+Lab Remote Bootstrap deploys and manages a Clash proxy, an AutoSSH reverse
+tunnel, a Zsh environment, and a small Web interface on a lab server.
 
-用于在实验室服务器上部署以下组件，并提供统一的初始化脚本：
+The Python CLI supports two deployment targets:
 
-- Clash
-- 反向 SSH 隧道
-- 增强的 Zsh 终端环境
+- `local`: run directly on the lab server. The active login account is the
+  deployment target user.
+- `remote`: run from a controller machine and connect to the lab server through
+  the explicit `target.*` SSH settings.
 
-支持两种部署方式：
+## Requirements
 
-1. **Docker 模式**：在宿主机中运行 Ubuntu 22.04 容器，适合较旧或不便直接改动的宿主机
-2. **Host 模式**：直接在宿主机安装和配置服务，适合较新的 Linux 服务器
+- Python 3.8 or newer for the CLI; Python 3.12 is recommended.
+- `uv` is recommended on systems where the default `python3` is older than
+  Python 3.8.
+- A lab-server account with passwordless sudo for remote deployments and sudo
+  access for local deployments.
+- An SSH key on the lab server that can authenticate to the cloud account used
+  by AutoSSH.
 
----
-
-## 快速开始
-
-### 前置条件
-
-在开始部署之前，请确保满足以下条件：
-
-#### 1. 本地环境（运行 lab-remote-ctl 的机器）
-
-- Python 3.8+ 已安装（推荐 Python 3.12）
-- 远程部署时，可以通过 SSH 连接到实验室服务器
-- 远程部署时，`target.ssh_identity_file` 是**本地机器上**用于连接实验室服务器的私钥；如果留空，则使用 `~/.ssh/config` 或 ssh-agent
-
-#### 2. 云服务器（用于反向 SSH 隧道）
-
-云服务器需要提前配置好：
+Install and run the CLI with one interpreter:
 
 ```bash
-# 在云服务器上执行
-bash cloud/prepare_cloud_reverse_ssh.sh 2223
-```
-
-该脚本会：
-- 启用 `AllowTcpForwarding yes`
-- 启用 `GatewayPorts clientspecified`
-- 重启 SSH 服务
-- 放行端口（如果启用了防火墙）
-
-验证云服务器可访问：
-```bash
-ssh <cloud_user>@<cloud_host>
-```
-
-#### 3. 实验室服务器（部署目标）
-
-实验室服务器需要：
-- Linux 系统（支持 Ubuntu、Debian、CentOS、Arch 等）
-- sudo 权限
-- 可以通过 SSH 从本地连接
-- **具备到云服务器的 SSH 密钥认证**（用于 AutoSSH 反向隧道）
-- Web 服务需要 `uv` 或 `python3.12`；部署会创建
-  `/opt/lab-remote-stack/web/.venv` 并由 systemd 使用该独立环境运行
-
-生成并配置 SSH 密钥：
-```bash
-# 在实验室服务器上生成密钥
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_autossh -N ""
-
-# 将公钥添加到云服务器
-ssh-copy-id -i ~/.ssh/id_ed25519_autossh.pub <cloud_user>@<cloud_host>
-
-# 测试连接
-ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
-```
-
-**身份模型**：这里有两个不同的 SSH 身份，绝不能互相回退或替代：
-
-- `target.*`：本地机器 → 实验室服务器，用于 `lab-remote-ctl` 远程部署。`target.ssh_identity_file` 可留空以使用 `~/.ssh/config` 或 ssh-agent。
-- `cloud.*`：实验室服务器 → 云服务器，用于 AutoSSH 反向隧道。`cloud.user` 是云服务器上的用户名，不是实验室服务器用户名。
-- `autossh.identity_file`：实验室服务器 → 云服务器，用于 AutoSSH 反向隧道。这里填写实验室服务器上的私钥路径，如 `~/.ssh/id_ed25519_autossh`。
-
-```text
-本机部署帐号 coreknowledge ── AutoSSH (使用 autossh.identity_file) ──> 云端帐号 mpxuann
-       ▲                                                                  │
-       └──────── ssh -p 2224 coreknowledge@39.106.136.35 ────────────────┘
-```
-
-本地部署时，反向隧道登录用户名总是运行 CLI 的当前本地帐号；例如上图中的
-`coreknowledge`。它绝不会变成云服务器帐号 `mpxuann`。远程部署时，反向隧道
-登录用户名总是显式配置的 `target.user`。
-
-#### 4. 网络连通性
-
-确保以下连接畅通：
-- 本地 → 云服务器（SSH）
-- 本地 → 实验室服务器（SSH）
-- 实验室服务器 → 云服务器（SSH，用于 AutoSSH）
-
-### 安装依赖
-
-```bash
-# 每次运行 CLI 时，由 uv 选择 Python 3.12 并安装项目依赖
 uv run --python 3.12 --with-requirements requirements.txt \
   ./cli/lab-remote-ctl --help
 ```
 
-如果不使用 `uv`，必须使用同一个解释器安装并运行：
+Without `uv`, bind both commands to Python 3.12:
 
 ```bash
 python3.12 -m pip install -r requirements.txt
 python3.12 ./cli/lab-remote-ctl --help
 ```
 
-### 方式 1：全新部署（首次部署 - 在实验室服务器上操作）
+## Identity Model
 
-如果本地无法直接 SSH 到实验室服务器（服务器在内网），需要先在实验室服务器上进行首次部署：
+The lab target account and cloud tunnel account are different settings:
 
-#### 1. 将项目拷贝到实验室服务器
+| Connection | Configuration | Account used |
+| --- | --- | --- |
+| Controller → lab server | `target.user` | Lab-server account |
+| Lab server → cloud server | `cloud.user` and `autossh.identity_file` | Cloud-server account |
+| Cloud reverse listener → lab server | Derived from the target | `target.user` for remote mode, active local user for local mode |
 
-```bash
-# 方式 A: 使用 U 盘或其他物理介质
-# 方式 B: 如果服务器可以访问 GitHub
-git clone https://github.com/mononihgt/lab-remote-bootstrap.git
-cd lab-remote-bootstrap
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl --help
-```
-
-#### 2. 在服务器上初始化配置
+`cloud.user` is never used as the lab-server account. For example, a local
+deployment run by `labuser` publishes a listener that is entered with:
 
 ```bash
-# 在实验室服务器上执行
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init --interactive
+ssh -p 2224 labuser@cloud.example.com
 ```
 
-**关键配置**：
-- `deployment.target` 设置为 `local`（本地部署模式）
-- 云服务器信息要正确填写（用于 AutoSSH 反向隧道）
-- 不需要填写 `target.*`（本地部署不需要控制 SSH 私钥）
-- `autossh.identity_file` 填写服务器上的 SSH 私钥路径
+Use your actual cloud host, reverse port, and lab account in real commands.
 
-#### 3. 在服务器上执行部署
+## Configuration
+
+Start the interactive wizard:
 
 ```bash
-# 在实验室服务器上执行
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl init --interactive
 ```
 
-本地部署会在预检阶段通过 `sudo -v` 交互式请求一次当前用户密码，后续
-Clash、AutoSSH、Web 和系统服务操作复用 sudo 凭据缓存；请从终端运行命令。
-部署 Web 时，若系统 `python3` 低于 3.8（例如 Ubuntu 18.04 的 Python 3.6），
-请确保运行部署命令的用户能执行 `uv` 或 `python3.12`。Web 服务会使用部署时
-创建的 `/opt/lab-remote-stack/web/.venv/bin/python`，而不是系统 Python。
+The wizard creates `config/config.yaml` and an empty
+`config/subscriptions.json` using the current configuration model.
 
-首次部署完成后，AutoSSH 会建立到云服务器的反向隧道，之后就可以从任何地方通过云服务器访问实验室服务器了：
+Local deployment only needs the deployment mode and cloud tunnel settings:
 
-```bash
-# 从任何地方连接
-ssh -p 2223 <lab_user>@<cloud_host>
+```yaml
+deployment:
+  mode: host
+  target: local
+
+cloud:
+  host: <cloud_public_host>
+  user: <cloud_user>
+  reverse_port: 2223
+  reverse_bind_address: 0.0.0.0
+
+autossh:
+  identity_file: ~/.ssh/id_ed25519_autossh
 ```
 
-**后续管理**：首次部署完成后，可在本地使用同一条 `uv run ... ./cli/lab-remote-ctl` 命令远程管理。将 `deployment.target` 改为 `remote`，并完整填写 `target.host`、`target.user` 与 `target.ssh_port`。
-
----
-
-### 方式 2：远程部署（本地可 SSH 到服务器）
-
-#### 1. 初始化配置
-
-```bash
-# 交互式配置向导（推荐）
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init --interactive
-
-# 或使用模板然后手动编辑
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init
-vim config/config.yaml
-```
-
-#### 2. 准备 Clash 资源（可选）
-
-将以下文件放入 `assets/clash/`：
-- Clash 内核二进制（mihomo、clash 等）- 如果没有，部署时会自动下载
-- `geoip.dat` 和 `geosite.dat` - 如果没有，部署时会自动下载
-
-#### 3. 部署到远程服务器
-
-**注意**：`lab-remote-ctl` 在本地运行，通过 SSH 控制远程服务器。
-远程部署开始前会自动清理 `target.host` / `target.ssh_port` 对应的本地 `known_hosts` 记录，避免反向隧道或重装系统后残留的 SSH 指纹导致隐藏失败。
-
-远程部署时的 SSH 配置示例：
+Remote deployment requires all target fields. Target SSH keys are optional;
+leave the field empty to use `~/.ssh/config` or an SSH agent:
 
 ```yaml
 deployment:
@@ -202,461 +91,101 @@ deployment:
   target: remote
 
 target:
-  # lab-remote-ctl 连接实验室服务器的方式
-  host: <target_ssh_host_or_cloud_tunnel_host>
+  host: <lab_ssh_host>
   user: <lab_user>
-  # 如果要重新部署 AutoSSH，不要使用 cloud.reverse_port 所在的同一个云端口。
-  # 这里应填写直连实验室服务器的维护端口，或另一个独立的反向隧道端口。
-  ssh_port: 2224
-  ssh_identity_file: ~/.ssh/<local_target_key>
+  ssh_port: 22
+  ssh_identity_file: ~/.ssh/id_lab
 
 cloud:
-  # 实验室服务器上的 AutoSSH 连接云服务器的方式
   host: <cloud_public_host>
   user: <cloud_user>
   reverse_port: 2223
-  # 反向 SSH 在云服务器上的监听地址；需要公网直连时用 0.0.0.0
   reverse_bind_address: 0.0.0.0
 
 autossh:
-  # 实验室服务器上的私钥路径，用于 AutoSSH 连接云服务器
-  identity_file: ~/.ssh/<server_autossh_key>
+  identity_file: ~/.ssh/id_ed25519_autossh
 ```
+
+## Deployment
+
+First-time setup normally runs on the lab server:
 
 ```bash
-# 完整部署（Clash + AutoSSH + Zsh + Web）
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy
-
-# 选择性部署
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-web  # 跳过 Web 界面
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-autossh  # 只通过现有反向隧道更新其他模块
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --dry-run   # 预览部署计划
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl deploy
 ```
 
-重新部署 Clash 时，CLI 会先将新的内核上传到临时路径，再原子替换
-`/opt/lab-remote-stack/clash/clash` 并重启 `lab-clash.service`。这避免了
-直接覆盖正在运行的 Clash 可执行文件时出现上传失败，也确保新的订阅配置、
-模板和端口设置会在本次部署中生效。
-
-部署完成后，AutoSSH 会建立反向隧道，你可以通过云服务器连接到实验室服务器：
-```bash
-# 从任何地方通过云服务器连接实验室服务器
-ssh -p 2223 <lab_user>@<cloud_host>
-```
-
-重新部署 AutoSSH 时，`lab-remote-ctl deploy` 会先通过实验室服务器登录云服务器，清理同一 `cloud.reverse_port` 上的旧监听进程，再重启 `lab-autossh.service`。这可以恢复旧反向隧道半死时出现的 `Connection timed out during banner exchange`。
-
-因此，完整部署（包含 AutoSSH）不能通过正在被 AutoSSH 管理的同一个云端反向隧道执行。也就是说，当 `deployment.target: remote`、`target.host` 等于 `cloud.host`，并且 `target.ssh_port` 等于 `cloud.reverse_port` 时，`lab-remote-ctl deploy` 会在预检阶段拒绝继续，避免部署进程断开自己的 SSH 连接。
-
-需要远程维护时请选择以下方式之一：
-
-- 如果只更新 Clash、Zsh 或 Web，使用现有反向隧道执行 `uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-autossh`。
-- 如果需要重新部署 AutoSSH，使用独立维护通道设置 `target.*`，例如直连实验室服务器的 SSH 端口、VPN 内网地址，或另一个不会被本次 AutoSSH 配置清理/重启的反向隧道端口。
-- 如果没有独立维护通道，先 SSH 到实验室服务器，在服务器本机将 `deployment.target` 设为 `local` 后执行 `uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy`。
-
-`deploy` 结束时会根据本次实际结果输出对应的 Next steps：成功部署的模块会显示后续操作，跳过的模块不会显示对应步骤，Zsh/Web 等非关键模块失败时会优先提示修复并重新部署。
-
-#### 4. 管理订阅
-
-订阅命令默认操作 `live` scope，也就是当前部署目标正在使用的服务器配置：
-
-- `deployment.target: remote`：通过 `target.*` SSH 配置操作实验室服务器上的 live 文件。
-- `deployment.target: local`：直接操作当前机器上的 live 文件，适合在实验室服务器本机执行 CLI。
-
-`init --interactive` 只会创建空的订阅状态，不会内置 `Default` 订阅或保存 VPN URL。需要代理节点时，用户必须显式添加订阅并执行 update。首次部署前添加订阅时应使用 `--scope workspace`，先生成待发布的 Clash 配置，再执行 `deploy`。
-
-live 文件默认位于：
-
-```text
-/opt/lab-remote-stack/clash/subscriptions.json
-/opt/lab-remote-stack/clash/config.yaml
-```
-
-如果只想修改当前 repo 工作区里的待发布文件，使用 `--scope workspace`：
-
-```text
-config/subscriptions.json
-config/clash.generated.yaml
-```
+From a controller machine, configure `deployment.target: remote` and the
+complete `target` block before running the same command. Useful options:
 
 ```bash
-# 添加订阅到 live 目标
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription
+# Preview the plan
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl deploy --dry-run
 
-# 更新订阅、设为 active、生成 Clash 配置并重启 live 目标上的 Clash
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription update "主力节点"
+# Update modules while preserving an existing AutoSSH tunnel
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl deploy --skip-autossh
 
-# 查看 live 目标上的订阅
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription list
-
-# 只查看 workspace 文件
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription list --scope workspace
-
-# 只更新 workspace，稍后再通过 deploy 发布
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription add "主力节点" https://example.com/subscription --scope workspace
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription update "主力节点" --scope workspace
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy --skip-autossh --skip-zsh --skip-web
-
-# 标记订阅为 active；要重新生成 Clash 配置仍需 update
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl subscription activate "主力节点"
+# Skip individual modules
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl deploy --skip-clash --skip-zsh --skip-web
 ```
 
-#### 5. 健康检查
+When a remote target uses the same host and port as the AutoSSH reverse
+listener, a full AutoSSH deployment is refused to prevent the deployment SSH
+connection from restarting itself. Use a separate maintenance endpoint or run
+the deployment locally on the lab server.
+
+## Subscriptions
+
+Subscription commands default to the live deployment target. Use
+`--scope workspace` to edit files in the repository before publishing them.
 
 ```bash
-# 检查系统健康状态
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl health
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl subscription add "Primary" https://example.com/subscription
 
-# JSON 格式输出
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl health --json
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl subscription update "Primary"
+
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl subscription list --scope workspace
 ```
 
-当 `deployment.target: remote` 时，健康检查会通过 `target.*` SSH 配置在实验室服务器上检查进程、监听端口、Clash API 和代理连通性；本地机器不会再被误判为部署目标。
+Live files are stored under `/opt/lab-remote-stack/clash/`; workspace files
+are `config/subscriptions.json` and `config/clash.generated.yaml`.
 
-#### 6. Web 管理界面
+## Health and Web Interface
 
 ```bash
-# 启动 Web 服务
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web start
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl health
 
-# 在浏览器中打开
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web open
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl web start
 
-# 停止 Web 服务
-uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web stop
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl web open
+
+uv run --python 3.12 --with-requirements requirements.txt \
+  ./cli/lab-remote-ctl web stop
 ```
 
-远程部署时，Web 服务默认只监听实验室服务器本机的 `127.0.0.1:5000`，Clash 控制端口默认只监听实验室服务器本机的 `127.0.0.1:9090`。在本地 PC 访问前先建立 SSH 隧道：
-
-```bash
-ssh -N -L 5001:127.0.0.1:5000 -L 9090:127.0.0.1:9090 sr665-4
-```
-
-`lab-remote-ctl web start` 和 `lab-remote-ctl web open` 在远程部署模式下会自动启动该本地隧道，然后打开 `http://localhost:5001`。`lab-remote-ctl web stop` 会停止远端 Web 服务，并清理本地隧道。不要直接访问本地 `http://localhost:5000`；macOS 可能已由 AirPlay/Control Center 占用该端口。
-
-### CLI 命令总览
-
-```bash
-lab-remote-ctl
-├── init              # 初始化配置
-├── deploy            # 部署到远程服务器
-├── subscription      # 订阅管理
-│   ├── add          # 添加订阅
-│   ├── list         # 列出所有订阅
-│   ├── activate     # 激活订阅
-│   ├── update       # 更新订阅
-│   └── remove       # 删除订阅
-├── health            # 健康检查
-├── web               # Web 服务管理
-│   ├── start        # 启动服务
-│   ├── stop         # 停止服务
-│   └── open         # 打开界面
-```
-
-**重要说明**：
-- `lab-remote-ctl` 在**本地 PC** 运行，通过 SSH 控制远程服务器
-- 部署的服务（Clash、AutoSSH、Web）在**实验室服务器**上运行
-- 通过云服务器的反向隧道，可从任何地方访问实验室服务器
-
-### 订阅格式支持
-
-新版本支持以下订阅格式：
-
-1. **Base64 编码订阅**：包含 vmess://、ss://、trojan:// 等协议的 Base64 编码链接
-2. **Clash YAML 订阅**：直接提供 Clash proxies 的 YAML 格式
-
-订阅会自动转换为 Clash 配置，并根据选择的模板（minimal/balanced/full）生成规则。
-
-### 完整使用流程总结
-
-```
-┌─────────────┐
-│  本地 PC    │  1. 安装依赖: python -m pip install -r requirements.txt
-│             │  2. 初始化配置: uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl init --interactive
-└──────┬──────┘  3. 部署: uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl deploy
-       │         4. 管理订阅: init 时填写 URL 或 subscription add/update
-       │ SSH     5. Web 管理: uv run --python 3.12 --with-requirements requirements.txt ./cli/lab-remote-ctl web open
-       ↓
-┌──────────────────┐
-│  云服务器        │  前置准备: bash cloud/prepare_cloud_reverse_ssh.sh 2223
-│  (反向隧道中转)  │  提供反向 SSH 端口 (默认 2223)
-└──────────────────┘
-       ↑
-       │ AutoSSH 反向隧道
-       │
-┌──────────────────────────┐
-│  实验室服务器 (部署目标)  │  运行服务:
-│                          │  - Clash (代理)
-│                          │  - AutoSSH (反向隧道)
-│                          │  - Zsh (终端环境)
-│                          │  - Web (管理界面)
-└──────────────────────────┘
-```
-
-**访问方式**：
-- SSH 连接实验室服务器：`ssh -p 2223 <user>@<cloud_host>`
-- Web 管理界面：远程部署时先建立 SSH 隧道，再访问 `http://localhost:5001`
-- Clash 代理：HTTP `7890`，SOCKS `7891`
-
----
-
-## 旧版本使用方式（稳定）
-
-以下是当前稳定版本的使用方式，新架构完成前仍可使用。
-
----
-
-## 仓库结构
-
-```text
-lab-remote-bootstrap/
-├── README.md
-├── assets/
-│   └── clash/
-│       └── README.md
-├── cloud/
-│   └── prepare_cloud_reverse_ssh.sh
-├── docker/
-│   ├── docker-stack.env.example
-│   ├── setup_docker_mirror_cn.sh
-│   └── setup_docker_stack.sh
-├── host/
-│   ├── host-stack.env.example
-│   └── setup_host_stack.sh
-├── local/
-│   ├── dashboard.env.example
-│   └── open_clash_dashboard.sh
-└── docs/
-    ├── Docker容器内连vpn.md
-    └── Docker 远程开发环境搭建与维护手册.md
-```
-
----
-
-## 脚本职责
-
-- **本地电脑**：`local/open_clash_dashboard.sh`
-- **实验室服务器**：`host/setup_host_stack.sh`、`docker/setup_docker_stack.sh`
-- **云服务器**：`cloud/prepare_cloud_reverse_ssh.sh`
-- **Docker 镜像源与代理优化**：`docker/setup_docker_mirror_cn.sh`
-
----
-
-## 前置条件
-
-### 1. 云服务器可正常 SSH 登录
-
-例如：
-
-```bash
-ssh <cloud_user>@<cloud_host>
-```
-
-### 2. 实验室服务器具备到云服务器的 SSH 密钥
-
-例如：
-
-```bash
-ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host>
-```
-
-### 3. 准备 Clash 文件
-
-将以下文件放入 `assets/clash/`：
-
-- Clash 内核二进制  
-  脚本会自动识别 `CrashCore`、`mihomo*`、`clash*`
-- `config.yaml`
-- `geoip.dat`
-- `geosite.dat`
-
-如不希望将 `config.yaml` 保存在本地，可在环境变量中设置：
-
-- `CLASH_CONFIG_URL=...`
-
-其优先级高于 `CLASH_CONFIG_FILE`。
-
----
-
-## 推荐部署顺序
-
-1. 在云服务器执行 `cloud/prepare_cloud_reverse_ssh.sh`
-2. 在实验室服务器选择 Docker 模式或 Host 模式执行部署
-3. 在本地使用 `local/open_clash_dashboard.sh` 打开 Clash Dashboard
-
----
-
-## 云服务器准备
-
-在云服务器执行：
-
-```bash
-bash cloud/prepare_cloud_reverse_ssh.sh 2223
-```
-
-该脚本会：
-
-- 启用 `AllowTcpForwarding yes`
-- 启用 `GatewayPorts clientspecified`
-- 重启 SSH 服务
-- 在启用 `ufw` 时放行对应端口
-
----
-
-## Docker 模式
-
-### 1. 复制配置
-
-```bash
-cp docker/docker-stack.env.example docker/docker-stack.env
-```
-
-至少需要修改：
-
-- 云服务器账号
-- 云服务器地址
-- 容器 root 密码
-
-默认情况下，`CLASH_SOURCE_DIR` 使用仓库内的 `./assets/clash`。
-
-### 2. 执行部署
-
-```bash
-bash docker/setup_docker_stack.sh docker/docker-stack.env
-```
-
-部署结果包括：
-
-- Docker 镜像构建与容器启动（`--restart always`）
-- 容器内 SSH 服务
-- AutoSSH 反向隧道
-- Clash 启动与端口注入
-- Zsh 环境增强（补全、历史搜索、autosuggestions、syntax-highlighting、powerlevel10k、fastfetch、fzf、zoxide、eza）。生成的 `.zshrc` 会先运行 fastfetch，再加载 powerlevel10k，避免启动横幅触发 powerlevel10k 的 console output warning。
-
----
-
-## Host 模式
-
-### 1. 复制配置
-
-```bash
-cp host/host-stack.env.example host/host-stack.env
-```
-
-至少需要修改：
-
-- 云服务器账号
-- 云服务器地址
-
-默认情况下，`CLASH_SOURCE_DIR` 使用仓库内的 `./assets/clash`。
-
-### 2. 执行部署
-
-```bash
-bash host/setup_host_stack.sh host/host-stack.env
-```
-
-部署结果包括：
-
-- 自动安装依赖（支持 `apt`、`dnf`、`yum`、`pacman`、`zypper`、`apk`）
-- Clash 安装到 `INSTALL_ROOT`（默认 `/opt/lab-remote-stack`）
-- systemd 服务创建与启用：
-  - `lab-clash.service`
-  - `lab-autossh.service`
-- `.zshrc` 注入代理环境变量
-- Zsh 环境增强（补全、历史搜索、autosuggestions、syntax-highlighting、powerlevel10k、fastfetch、fzf、zoxide、eza）。生成的 `.zshrc` 会先运行 fastfetch，再加载 powerlevel10k，避免启动横幅触发 powerlevel10k 的 console output warning。
-
----
-
-## Docker 镜像源优化
-
-仅在 Docker 模式下使用：
-
-```bash
-# 仅配置国内 Docker registry mirror
-bash docker/setup_docker_mirror_cn.sh
-
-# 同时为 Docker daemon 配置 Clash 代理
-bash docker/setup_docker_mirror_cn.sh --enable-proxy
-```
-
----
-
-## Clash Dashboard
-
-### 1. 复制本地配置
-
-```bash
-cp local/dashboard.env.example local/dashboard.env
-```
-
-如服务器仅允许公钥登录，可在 `local/dashboard.env` 中指定私钥：
-
-```bash
-DASHBOARD_SSH_IDENTITY_FILE=~/.ssh/id_ed25519
-```
-
-### 2. 建立隧道并打开面板
-
-```bash
-bash local/open_clash_dashboard.sh local/dashboard.env
-```
-
-脚本会：
-
-- 建立本地到远端 Clash API 的 SSH 隧道
-- 打开 Dashboard 页面
-- 输出停止隧道所需的 `ssh -O exit` 命令
-
-默认本地转发端口为 `9090`。
-
----
-
-## 常用检查
-
-### 检查云端端口监听
-
-```bash
-ssh -i ~/.ssh/id_ed25519_autossh <cloud_user>@<cloud_host> "ss -tnl | grep 2223"
-```
-
-### 检查 Host 模式服务状态
-
-```bash
-sudo systemctl status lab-clash.service
-sudo systemctl status lab-autossh.service
-```
-
-### 查看 Host 模式日志
-
-```bash
-sudo journalctl -u lab-clash.service -f
-sudo journalctl -u lab-autossh.service -f
-```
-
-### SSH 输入异常
-
-若 SSH 登录后出现乱码或重复输入，可先执行：
-
-```bash
-stty sane
-reset
-```
-
-若问题仍然存在，可临时禁用 `~/.zshrc` 中的相关插件后重新登录，例如：
-
-- `zsh-autosuggestions`
-- `zsh-syntax-highlighting`
-
----
-
-## 连接方式
-
-- Docker 模式默认连接方式：`ssh -p 2223 <当前 Linux 用户>@<云服务器IP>`
-- Host 模式默认连接方式：`ssh -p 2223 <当前 Linux 用户>@<云服务器IP>`
-
----
-
-## 待完善功能
-
-暂无。
+The Web service listens on the target's `127.0.0.1:5000` by default. Remote
+Web access uses a local SSH tunnel on port `5001`; `web open` starts it when
+needed. Clash uses HTTP port `7890`, SOCKS port `7891`, and API port `9090` by
+default.
+
+## Standalone Resources
+
+The repository also includes independent shell resources for environments that
+do not use the Python CLI:
+
+- `cloud/prepare_cloud_reverse_ssh.sh` prepares the cloud SSH daemon.
+- `host/setup_host_stack.sh` installs the host-mode stack.
+- `docker/setup_docker_stack.sh` installs the Docker-mode stack.
+- `local/open_clash_dashboard.sh` opens a local Clash dashboard tunnel.
+
+These scripts use their own environment-file configuration and are separate
+from the Python CLI configuration model.

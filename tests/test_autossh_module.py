@@ -28,7 +28,7 @@ class AutoSSHModuleTests(unittest.TestCase):
 
         module = AutoSSHModule(FakeConfig())
         context = MagicMock()
-        context.target.user = "coreknowledge"
+        context.target.user = "labuser"
         context.cloud_tunnel.host = "cloud.example.com"
         context.cloud_tunnel.user = "clouduser"
         context.cloud_tunnel.reverse_port = 2224
@@ -39,7 +39,7 @@ class AutoSSHModuleTests(unittest.TestCase):
         self.assertTrue(module._create_systemd_service(20000, "~/.ssh/id_autossh"))
 
         command = context.run.call_args.args[0]
-        self.assertIn("User=coreknowledge", command)
+        self.assertIn("User=labuser", command)
         self.assertIn("-R 0.0.0.0:2224:localhost:22", command)
         self.assertIn("clouduser@cloud.example.com", command)
         self.assertNotIn("User=clouduser", command)

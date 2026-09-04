@@ -218,7 +218,7 @@ Host lab-docker
 + **原因**：云服务器不认密钥，或容器内密钥权限错误。
 + **解决**：
     1. 确保 `ssh_keys/cloud_key` 是正确的文件（不是文件夹），且宿主机权限为 600。
-    2. 确保 `entrypoint.sh` 里连接云服务器的用户名（如 `coreknowledge`）是正确的，不要用 `root` 连云服务器。
+    2. 确保 `entrypoint.sh` 里连接云服务器的用户名（如 `clouduser`）是正确的，不要用 `root` 连云服务器。
     3. 使用 `sudo docker logs -f lab-cpu-container` 查看报错。
 
 ### Q3: 连不上，提示 Connection refused？

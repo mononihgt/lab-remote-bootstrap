@@ -40,13 +40,11 @@ callers. Callers do not inspect `target.*` or `cloud.*` to choose a user.
 - `autossh.identity_file` remains a key on the lab target for the outbound
   lab-to-cloud connection; it is not a controller SSH identity.
 
-## Migration
+## Configuration Contract
 
-This is a clean break. Local configurations remain valid without a `target`
-block. Remote configurations must include `target.host`, `target.user`, and
-`target.ssh_port`. The deprecated `deployment.ssh_identity_file`, cloud
-endpoint fallback, `migrate` CLI command, and migration module are removed.
-The Python CLI supports only this configuration model.
+Local configurations do not need a `target` block. Remote configurations must
+include `target.host`, `target.user`, and `target.ssh_port`. The Python CLI
+supports only this configuration model, with no cloud endpoint fallback.
 
 ## Verification
 

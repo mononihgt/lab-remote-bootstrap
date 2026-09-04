@@ -27,7 +27,7 @@ def local_config():
     return FakeConfig(
         {
             "deployment": {"target": "local"},
-            "cloud": {"host": "39.106.136.35", "user": "mpxuann", "reverse_port": 2224},
+            "cloud": {"host": "cloud.example.com", "user": "clouduser", "reverse_port": 2224},
         }
     )
 
@@ -51,16 +51,16 @@ class DeploymentContextTests(unittest.TestCase):
     def test_local_target_uses_active_login_not_cloud_user(self):
         from deployment import DeploymentContext
 
-        with patch("deployment.getpass.getuser", return_value="coreknowledge"):
+        with patch("deployment.getpass.getuser", return_value="labuser"):
             context = DeploymentContext.from_config(local_config())
 
         self.assertTrue(context.target.is_local)
-        self.assertEqual(context.target.user, "coreknowledge")
+        self.assertEqual(context.target.user, "labuser")
         self.assertEqual(
             context.reverse_tunnel_ssh_args(),
-            ["ssh", "-p", "2224", "coreknowledge@39.106.136.35"],
+            ["ssh", "-p", "2224", "labuser@cloud.example.com"],
         )
-        self.assertEqual(context.cloud_tunnel.user, "mpxuann")
+        self.assertEqual(context.cloud_tunnel.user, "clouduser")
 
     def test_remote_target_never_falls_back_to_cloud_endpoint(self):
         from deployment import DeploymentConfigurationError, DeploymentContext
@@ -89,7 +89,7 @@ class DeploymentContextTests(unittest.TestCase):
     def test_local_target_routes_commands_without_ssh(self):
         from deployment import DeploymentContext
 
-        with patch("deployment.getpass.getuser", return_value="coreknowledge"):
+        with patch("deployment.getpass.getuser", return_value="labuser"):
             context = DeploymentContext.from_config(local_config())
         with patch("deployment.run_command", return_value=(0, "ok", "")) as run_local:
             context.run("id -un")
@@ -101,7 +101,7 @@ class DeploymentContextTests(unittest.TestCase):
     def test_local_file_transfer_copies_without_scp(self):
         from deployment import DeploymentContext
 
-        with patch("deployment.getpass.getuser", return_value="coreknowledge"):
+        with patch("deployment.getpass.getuser", return_value="labuser"):
             context = DeploymentContext.from_config(local_config())
         with tempfile.TemporaryDirectory() as tempdir:
             source = Path(tempdir) / "source.txt"

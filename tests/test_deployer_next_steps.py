@@ -37,17 +37,17 @@ class DeployerNextStepsTests(unittest.TestCase):
             {
                 "deployment": {"mode": "host", "target": "local"},
                 "cloud": {
-                    "host": "39.106.136.35",
-                    "user": "mpxuann",
+                    "host": "cloud.example.com",
+                    "user": "clouduser",
                     "reverse_port": 2224,
                 },
             }
         )
-        with patch("deployment.getpass.getuser", return_value="coreknowledge"):
+        with patch("deployment.getpass.getuser", return_value="labuser"):
             output = self.capture(config, ["autossh"])
 
-        self.assertIn("ssh -p 2224 coreknowledge@39.106.136.35", output)
-        self.assertNotIn("mpxuann@39.106.136.35", output)
+        self.assertIn("ssh -p 2224 labuser@cloud.example.com", output)
+        self.assertNotIn("clouduser@cloud.example.com", output)
 
     def test_remote_web_tunnel_uses_target_not_cloud_identity(self):
         config = FakeConfig(

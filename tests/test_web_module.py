@@ -39,14 +39,14 @@ class WebModuleTests(unittest.TestCase):
 
         module = WebModule(FakeConfig())
         context = MagicMock()
-        context.target.user = "coreknowledge"
+        context.target.user = "labuser"
         context.run.return_value = (0, "", "")
         module.context = context
 
         self.assertTrue(module._create_systemd_service("/opt/lab-stack"))
 
         command = context.run.call_args.args[0]
-        self.assertIn("User=coreknowledge", command)
+        self.assertIn("User=labuser", command)
         self.assertIn("ExecStart=/opt/lab-stack/web/.venv/bin/python /opt/lab-stack/web/app.py", command)
 
 
