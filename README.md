@@ -82,6 +82,10 @@ autossh:
   identity_file: ~/.ssh/id_ed25519_autossh
 ```
 
+`autossh.identity_file` is a path on the lab server. Home-relative paths such
+as `~/.ssh/id_ed25519_autossh` are expanded using the target account's home
+directory for both setup commands and the systemd service.
+
 Remote deployment requires all target fields. Target SSH keys are optional;
 leave the field empty to use `~/.ssh/config` or an SSH agent:
 

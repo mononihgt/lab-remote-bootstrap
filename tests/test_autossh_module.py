@@ -42,6 +42,7 @@ class AutoSSHModuleTests(unittest.TestCase):
         self.assertIn("User=labuser", command)
         self.assertIn("-R 0.0.0.0:2224:localhost:22", command)
         self.assertIn("clouduser@cloud.example.com", command)
+        self.assertIn("-i %h/.ssh/id_autossh", command)
         self.assertNotIn("User=clouduser", command)
 
     def test_validation_requires_only_server_side_autossh_identity(self):
@@ -49,6 +50,22 @@ class AutoSSHModuleTests(unittest.TestCase):
 
         module = AutoSSHModule(FakeConfig())
         self.assertTrue(module.validate())
+
+    def test_setup_ssh_key_expands_home_relative_identity_path(self):
+        from modules.autossh_module import AutoSSHModule
+
+        module = AutoSSHModule(FakeConfig())
+        context = MagicMock()
+        context.cloud_tunnel.host = "cloud.example.com"
+        context.cloud_tunnel.user = "clouduser"
+        context.run.return_value = (0, "", "")
+        module.context = context
+
+        self.assertTrue(module._setup_ssh_key("~/.ssh/id_rsa"))
+
+        commands = [call.args[0] for call in context.run.call_args_list]
+        self.assertIn('chmod 600 "$HOME"/.ssh/id_rsa', commands)
+        self.assertNotIn("'~/.ssh/id_rsa'", "\n".join(commands))
 
 
 if __name__ == "__main__":

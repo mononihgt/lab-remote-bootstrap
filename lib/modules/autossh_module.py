@@ -81,9 +81,10 @@ fi
     def _setup_ssh_key(self, identity_file: str) -> bool:
         print_info("Setting up SSH key...")
         tunnel = self.context.cloud_tunnel
+        shell_identity_file = self._shell_identity_path(identity_file)
         commands = (
             "mkdir -p $HOME/.ssh && chmod 700 $HOME/.ssh",
-            f"chmod 600 {shlex.quote(identity_file)}",
+            f"chmod 600 {shell_identity_file}",
             f"ssh-keyscan -H {shlex.quote(tunnel.host)} >> $HOME/.ssh/known_hosts 2>/dev/null || true",
         )
         for command in commands:
@@ -94,7 +95,7 @@ fi
 
         print_info(f"Testing connection to cloud server {tunnel.host}...")
         test_command = (
-            f"ssh -i {shlex.quote(identity_file)} -o ConnectTimeout=10 "
+            f"ssh -i {shell_identity_file} -o ConnectTimeout=10 "
             f"-o StrictHostKeyChecking=no {shlex.quote(tunnel.user)}@{shlex.quote(tunnel.host)} "
             "'echo Connection successful'"
         )
@@ -115,6 +116,7 @@ fi
     def _cleanup_reverse_port(self, identity_file: str) -> bool:
         print_info("Cleaning stale reverse SSH listener...")
         tunnel = self.context.cloud_tunnel
+        shell_identity_file = self._shell_identity_path(identity_file)
         cleanup_script = f"""
 set +e
 if command -v fuser >/dev/null 2>&1; then
@@ -128,7 +130,7 @@ fi
 exit 0
 """
         command = (
-            f"ssh -i {shlex.quote(identity_file)} -o ConnectTimeout=10 "
+            f"ssh -i {shell_identity_file} -o ConnectTimeout=10 "
             f"-o StrictHostKeyChecking=no {shlex.quote(tunnel.user)}@{shlex.quote(tunnel.host)} "
             f"{shlex.quote(cleanup_script)}"
         )
@@ -144,6 +146,7 @@ exit 0
     def _create_systemd_service(self, monitor_port: int, identity_file: str) -> bool:
         print_info("Creating systemd service...")
         tunnel = self.context.cloud_tunnel
+        systemd_identity_file = self._systemd_identity_path(identity_file)
         service_content = f"""[Unit]
 Description=AutoSSH Reverse Tunnel
 After=network.target
@@ -158,7 +161,7 @@ ExecStart=/usr/bin/autossh -M {monitor_port} -N \\
     -o "ServerAliveCountMax=3" \\
     -o "StrictHostKeyChecking=no" \\
     -o "ExitOnForwardFailure=yes" \\
-    -i {identity_file} \\
+    -i {systemd_identity_file} \\
     -R {tunnel.reverse_bind_address}:{tunnel.reverse_port}:localhost:22 \\
     {tunnel.user}@{tunnel.host}
 Restart=always
@@ -180,6 +183,24 @@ sudo systemctl enable lab-autossh.service
             return False
         print_success("Systemd service created")
         return True
+
+    @staticmethod
+    def _shell_identity_path(identity_file: str) -> str:
+        """Quote an identity path while allowing target-shell home expansion."""
+        if identity_file == "~":
+            return '"$HOME"'
+        if identity_file.startswith("~/"):
+            return '"$HOME"/' + shlex.quote(identity_file[2:])
+        return shlex.quote(identity_file)
+
+    @staticmethod
+    def _systemd_identity_path(identity_file: str) -> str:
+        """Resolve a home-relative identity path in a systemd unit."""
+        if identity_file == "~":
+            return "%h"
+        if identity_file.startswith("~/"):
+            return "%h/" + identity_file[2:]
+        return identity_file
 
     def _start_service(self) -> bool:
         print_info("Starting AutoSSH service...")
